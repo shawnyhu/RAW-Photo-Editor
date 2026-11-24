@@ -1,0 +1,65 @@
+name: Apple Silicon OFX host
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ofx-macos.yml
+      - blender_raw/vendor/spektrafilm_ofx/src/**
+      - blender_raw/vendor/spektrafilm_ofx/include/**
+      - blender_raw/vendor/spektrafilm_ofx/build.py
+      - tests/ofx_macos_smoke.py
+      - blender_raw/ofx_schema.py
+      - blender_raw/ofx_node.py
+      - blender_raw/spektrafilm_ofx_engine.py
+      - blender_raw/vendor/spektrafilm_ofx/parameters.json
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-load:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify signed arm64 host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          python3 blender_raw/vendor/spektrafilm_ofx/build.py
+          host=blender_raw/vendor/spektrafilm_ofx/photo_ofx_host
+          file "$host"
+          codesign --verify --strict --verbose=2 "$host"
+          lipo "$host" -verify_arch arm64
+          tar -czf "$RUNNER_TEMP/mac-ofx-host.tar.gz" -C blender_raw/vendor/spektrafilm_ofx photo_ofx_host
+      - name: Extract external official plugin for validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 --max-time 300 -o "$RUNNER_TEMP/ofx.zip" https://downloads.spektrafilm.114c.de/latest/spektrafilm-OFX-macOS.zip
+          ditto -x -k "$RUNNER_TEMP/ofx.zip" "$RUNNER_TEMP/ofx-package"
+          pkg=$(find "$RUNNER_TEMP/ofx-package" -name '*.pkg' -print -quit)
+          test -n "$pkg"
+          pkgutil --expand-full "$pkg" "$RUNNER_TEMP/ofx-expanded"
+          bundle=$(find "$RUNNER_TEMP/ofx-expanded" -type d -name 'spektrafilm.ofx.bundle' -print -quit)
+          test -n "$bundle"
+          echo "OFX_BUNDLE=$bundle" >> "$GITHUB_ENV"
+      - name: Load actual OFX and test Metal when available
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/ofx-test-python"
+          "$RUNNER_TEMP/ofx-test-python/bin/python" -m pip install numpy
+          "$RUNNER_TEMP/ofx-test-python/bin/python" tests/ofx_macos_smoke.py "$OFX_BUNDLE" "$RUNNER_TEMP/mac-ofx-report.json"
+      - name: Preserve host and validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-ofx-host
+          path: |
+            ${{ runner.temp }}/mac-ofx-host.tar.gz
+            ${{ runner.temp }}/mac-ofx-report.json
+          if-no-files-found: error

@@ -1,0 +1,242 @@
+name: Blender 5.3 offline installer
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - blender_raw/**
+      - tests/**
+      - .github/workflows/installer-windows.yml
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  decoder:
+    uses: ./.github/workflows/prepare-decoder.yml
+  windows-x64:
+    needs: decoder
+    runs-on: windows-2025
+    timeout-minutes: 40
+    outputs:
+      zip_sha: ${{ steps.build.outputs.sha }}
+      zip_name: ${{ steps.build.outputs.name }}
+      profile_pixels: ${{ steps.profiles.outputs.pixels }}
+    steps:
+      - &checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-rawpy-wheel
+          path: blender_raw/wheels
+
+      - name: Provide software OpenGL for headless camera preflight
+        uses: ssciwr/setup-mesa-dist-win@2dfeaebfa514f74c2b8cd8d27108c31486d33e72
+        with:
+          version: '26.0.3'
+          deployment-choice: '1'
+
+      - name: Download official Blender 5.3.0 for Windows x64
+        run: |
+          $archive = "$env:RUNNER_TEMP/blender.zip"
+          curl.exe --fail --silent --show-error --location --retry 3 --output $archive 'https://download.blender.org/release/Blender5.3/blender-5.3.0-windows-x64.zip'
+          if ($LASTEXITCODE -ne 0 -or (Get-FileHash $archive).Hash -ne '3ac567a63d59d9934f7b9213bfb27ba05760e1fb366f8f55c381573ec3eabfa8') { throw 'Blender download verification failed' }
+          7z x -bso0 -bsp0 "-o$env:RUNNER_TEMP" $archive
+          if ($LASTEXITCODE -ne 0) { throw 'Could not extract Blender' }
+          "BLENDER=$env:RUNNER_TEMP/blender-5.3.0-windows-x64/blender.exe" >> $env:GITHUB_ENV
+
+      - &fixtures
+        name: Download and verify public CC0 camera originals
+        run: |
+          $fixtures = (New-Item -ItemType Directory "$env:RUNNER_TEMP/raw-samples").FullName
+          "FIXTURES=$fixtures" >> $env:GITHUB_ENV
+          $profileDir = (New-Item -ItemType Directory "$env:RUNNER_TEMP/blender-profile").FullName
+          "BLENDER_USER_RESOURCES=$profileDir" >> $env:GITHUB_ENV
+          function Download-Checked($name, $entry, $sha256) {
+            $path = Join-Path $fixtures $name
+            curl --fail --location --silent --show-error --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 --output $path "$entry"
+            if ($LASTEXITCODE -ne 0 -or (Get-FileHash $path).Hash -ne $sha256) { throw "Invalid download for $name" }
+          }
+          Download-Checked 'Leica-M8.DNG' 'https://raw.pixls.us/getfile.php/2988/nice/Leica%20-%20M8%20-%208bit%208bit%20uncompressed%20(3%3A2).DNG' '7fdcca2371bb07fbf9483fcb08e3b5ab093eca1ca3924cbc86d6863736c31153'
+          Download-Checked 'Z8-HE.NEF' 'https://raw.pixls.us/getfile.php/6616/nice/Nikon%20-%20Z%208%20-%208bit%208bit%20compressed%20(3%3A2).NEF' '82df041542b8d328738443bb5ff3373b396e406ecc8cbe7dc3b35252790c53e7'
+          Download-Checked 'A7III.ARW' 'https://raw.pixls.us/getfile.php/2414/nice/Sony%20-%20ILCE-7M3%20-%2014bit%2014bit%20compressed%20(3%3A2).ARW' '250784580ea527442c09004417bb0eead484f2bf3ee8f9121a776ac65bb50d0f'
+          Download-Checked 'EOS-R5.CR3' 'https://raw.pixls.us/getfile.php/4698/nice/Canon%20-%20EOS%20R5%20-%203%3A2.CR3' '2deae46b816e56ba91ae7a3892ca121290e12d5b22afb11f5b05a3d8f09f759f'
+          Download-Checked 'D700.NEF' 'https://raw.pixls.us/getfile.php/2249/nice/Nikon%20-%20D700%20-%2014bit%2014bit%20compressed%20(Lossless)%20(3%3A2).NEF' '00c3314f2ccf92aff17644943e6149e8793b517c24bb2c38a15ec41f3af109cb'
+          Download-Checked 'Z-f.NEF' 'https://raw.pixls.us/getfile.php/6886/nice/Nikon%20-%20Z%20f%20-%208bit%208bit%20lossy%20compressed%20(3%3A2).NEF' 'c888f109dc420e359853a2ce768d8a6274b8ba0109b2f5cb6e0c982981d5a624'
+          Download-Checked 'Leica-M10-R.DNG' 'https://raw.pixls.us/getfile.php/7853/nice/Leica%20-%20M10-R%20-%2016bit%20compressed%20(3%3A2).DNG' 'ba35d25d521c7ddbc4feca69c8cdbe071ac65dcd6cf2c93374391bf6f3662b8d'
+          Download-Checked 'Canon EOS R5.dcp' 'https://raw.githubusercontent.com/RawTherapee/RawTherapee/a8a3d1bc7b419ed1c974c39276c97e618a4f9a1b/rtdata/dcpprofiles/Canon%20EOS%20R5.dcp' '47dbb2573e1cb78de67ba63a42f47c109457920b7388fcde829a7b026c076b98'
+          Download-Checked 'NIKON D700.dcp' 'https://raw.githubusercontent.com/RawTherapee/RawTherapee/67c75eeb8559da39c1714ecdc622ddda1615fcf3/rtdata/dcpprofiles/NIKON%20D700.dcp' 'eb546e6cf147692783e091b222af0e05aafbcc55090fca4bf035dc39244fed25'
+          Download-Checked 'NIKON Z 8.dcp' 'https://raw.githubusercontent.com/RawTherapee/RawTherapee/a8a3d1bc7b419ed1c974c39276c97e618a4f9a1b/rtdata/dcpprofiles/NIKON%20Z%208.dcp' 'eef2ad2709fcaeb3830a25f63bd9079d68166d4bcac5419bcefe21753cc3b228'
+
+      - name: Build one ZIP for both systems
+        id: build
+        run: |
+          & $env:BLENDER --version
+          $version = python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('blender_raw/blender_manifest.toml').read_text(encoding='utf-8'))['version'])"
+          $name = "raw_photo_editor-$version.zip"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $package = "$env:GITHUB_WORKSPACE/dist/$name"
+          & $env:BLENDER -b --factory-startup --offline-mode --command extension build --source-dir blender_raw --output-filepath $package
+          if ($LASTEXITCODE -ne 0) { throw 'Extension build failed' }
+          $sha = (Get-FileHash $package).Hash
+          Write-Host "Installer SHA-256 $sha"
+          "PACKAGE=$package" >> $env:GITHUB_ENV
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+
+      - name: Save the exact cross-platform ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: blender-photo-editor-installer
+          path: dist/${{ steps.build.outputs.name }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - &install
+        name: Install from disk and enable in a fresh offline profile
+        run: |
+          & $env:BLENDER -b --factory-startup --offline-mode --command extension install-file --repo user_default --enable $env:PACKAGE
+          if ($LASTEXITCODE -ne 0) { throw 'Offline extension installation failed' }
+
+      - &installed_smoke
+        name: Verify the installed ZIP and native CPU export
+        run: |
+          & $env:BLENDER -b --offline-mode --python-exit-code 1 --python tests/native_install_smoke.py
+          if ($LASTEXITCODE -ne 0) { throw 'Installed ZIP native smoke test failed' }
+
+      - &native_source
+        name: Verify native photo scenes, effects, source binding and batch adjustments
+        run: |
+          # These tests register checkout modules themselves. Factory startup
+          # keeps the installed extension disabled to avoid duplicate RNA types.
+          foreach ($test in @('native_photo_scenes', 'native_effect_controls', 'native_source_binding', 'native_adjustments', 'native_scene_pipeline')) {
+            & $env:BLENDER -b --factory-startup --offline-mode --python-exit-code 1 --python "tests/$test.py"
+            if ($LASTEXITCODE -ne 0) { throw "Native scene regression failed: $test" }
+          }
+
+      - name: Check out the previous stable source for RAW pixel comparison
+        if: github.event_name == 'pull_request' && github.head_ref == 'release/public-source-prep'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: reference-source
+          persist-credentials: false
+      - name: Compare automatic RAW development to the previous release
+        if: github.event_name == 'pull_request' && github.head_ref == 'release/public-source-prep'
+        run: |
+          $current = $env:BLENDER_USER_RESOURCES
+          $env:BLENDER_USER_RESOURCES = Join-Path $env:RUNNER_TEMP 'reference-profile'
+          $ref = Join-Path $env:RUNNER_TEMP 'reference.zip'
+          $samples = Join-Path $env:RUNNER_TEMP 'reference-pixels'
+          & $env:BLENDER -b --factory-startup --offline-mode --command extension build --source-dir reference-source/blender_raw --output-filepath $ref
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $env:BLENDER -b --factory-startup --offline-mode --command extension install-file --repo user_default --enable $ref
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          foreach ($mode in @('reference','compare')) {
+            if ($mode -eq 'compare') { $env:BLENDER_USER_RESOURCES = $current }
+            & $env:BLENDER -b --offline-mode --python-exit-code 1 --python tests/raw_release_parity.py -- $mode "$env:FIXTURES" "$samples"
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+
+      - &profiles
+        name: Verify camera profile sources, exact matching and developed pixels
+        id: profiles
+        run: |
+          $pixels = "$env:RUNNER_TEMP/profile-pixels.json"
+          $compare = @()
+          if ($env:WINDOWS_PIXELS) {
+            $reference = "$env:RUNNER_TEMP/windows-pixels.json"
+            Set-Content -Encoding utf8 -Path $reference -Value $env:WINDOWS_PIXELS
+            $compare = @('--compare', $reference)
+          }
+          & $env:BLENDER -b --offline-mode --python-exit-code 1 --python tests/camera_profiles.py -- "$env:FIXTURES" --write $pixels @compare
+          if ($LASTEXITCODE -ne 0) { throw 'Camera profile regression failed' }
+          "pixels=$(Get-Content -Raw $pixels)" >> $env:GITHUB_OUTPUT
+
+      - &canon_wb
+        name: Verify Canon as-shot metadata handling
+        run: python tests/canon_wb.py
+
+      - &raw_looks
+        name: Verify 3D LUTs, packed looks, camera ICC, DCP and previous looks offline
+        run: |
+          & $env:BLENDER -b --offline-mode --python-exit-code 1 --python tests/raw_highlights.py
+          if ($LASTEXITCODE -ne 0) { throw 'RAW highlight regression failed' }
+          & $env:BLENDER -b --offline-mode --python-exit-code 1 --python tests/lut_engine.py
+          if ($LASTEXITCODE -ne 0) { throw '3D LUT regression failed' }
+          & $env:BLENDER -b --offline-mode --python-exit-code 1 --python tests/base_look.py -- "$env:FIXTURES/EOS-R5.CR3" "$env:FIXTURES/Leica-M8.DNG" "$env:FIXTURES/D700.NEF"
+          if ($LASTEXITCODE -ne 0) { throw 'BaseLook or DCP regression failed' }
+          & $env:BLENDER -b --offline-mode --python-exit-code 1 --python tests/input_icc.py -- "$env:FIXTURES/Leica-M8.DNG"
+          if ($LASTEXITCODE -ne 0) { throw 'Packed RAW, ICC and 3D LUT regression failed' }
+
+      - &worker
+        name: Verify workspace bakes and isolated DNG decoding
+        run: |
+          & $env:BLENDER -b --offline-mode --python-exit-code 1 --python tests/workspace_bakes.py
+          if ($LASTEXITCODE -ne 0) { throw 'Workspace bake unpack regression failed' }
+          & $env:BLENDER -b --offline-mode --python-exit-code 1 --python tests/worker_runtime.py -- "$env:FIXTURES/Leica-M8.DNG"
+          if ($LASTEXITCODE -ne 0) { throw 'Worker runtime regression failed' }
+
+      - &batch
+        name: Import, preview and export four camera formats
+        run: |
+          & $env:BLENDER -b --offline-mode --python-exit-code 1 --python tests/camera_batch.py -- "$env:FIXTURES"
+          if ($LASTEXITCODE -ne 0) { throw 'Camera format batch regression failed' }
+
+      - &native_worker
+        name: Export independent photo scenes through the installed snapshot worker
+        run: |
+          & $env:BLENDER -b --offline-mode --python-exit-code 1 --python tests/native_worker_export.py -- "$env:FIXTURES/Leica-M8.DNG"
+          if ($LASTEXITCODE -ne 0) { throw 'Native full-resolution snapshot worker regression failed' }
+
+  macos-arm64:
+    needs: windows-x64
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      WINDOWS_PIXELS: ${{ needs.windows-x64.outputs.profile_pixels }}
+    steps:
+      - *checkout
+
+      - name: Download the tested Windows-built ZIP
+        uses: actions/download-artifact@v4
+        with:
+          name: blender-photo-editor-installer
+          path: dist
+
+      - name: Verify the same ZIP and mount official Blender 5.3.0 for Apple Silicon
+        shell: bash
+        env:
+          ZIP_NAME: ${{ needs.windows-x64.outputs.zip_name }}
+          ZIP_SHA: ${{ needs.windows-x64.outputs.zip_sha }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          package="$GITHUB_WORKSPACE/dist/$ZIP_NAME"
+          printf '%s  %s\n' "$ZIP_SHA" "$package" | shasum -a 256 -c -
+          dmg="$RUNNER_TEMP/blender.dmg"
+          curl --fail --silent --show-error --location --retry 3 --output "$dmg" https://download.blender.org/release/Blender5.3/blender-5.3.0-macos-arm64.dmg
+          printf '%s  %s\n' 2d802b54766741e612cead50b03ebbc8eb64dadc71eda932573d256b8a784720 "$dmg" | shasum -a 256 -c -
+          mount="$RUNNER_TEMP/blender-dmg"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount" "$dmg"
+          echo "BLENDER=$mount/Blender.app/Contents/MacOS/Blender" >> "$GITHUB_ENV"
+          echo "PACKAGE=$package" >> "$GITHUB_ENV"
+
+      - *fixtures
+      - *install
+      - *installed_smoke
+      - *native_source
+      - *profiles
+      - *canon_wb
+      - *raw_looks
+      - *worker
+      - *batch
+      - *native_worker

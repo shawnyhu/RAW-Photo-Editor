@@ -1,0 +1,51 @@
+name: Prepare Windows RAW decoder
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fetch the upstream wheel for its unchanged Python bindings and the comparison test
+        shell: pwsh
+        run: |
+          python -m pip download --only-binary=:all: --no-deps --dest "$env:RUNNER_TEMP" rawpy==0.28.0
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $wheel = Join-Path $env:RUNNER_TEMP 'rawpy-0.28.0-cp313-cp313-win_amd64.whl'
+          if ((Get-FileHash $wheel).Hash -ne '5dddd07b8c126402962f75562a66f94b30ee554405d5b4ae4d4ca2dbad8c5aca') { throw 'Upstream rawpy checksum failed' }
+      - name: Extract pinned upstream LLVM 22.1.8
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'llvm.exe'
+          curl.exe -fsSL --retry 3 -o $archive 'https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/LLVM-22.1.8-win64.exe'
+          if ($LASTEXITCODE -ne 0 -or (Get-FileHash $archive).Hash -ne '16e5709785fef73c854646241c4a92c5cd574318d1b33c63330dd7721903e55c') { throw 'LLVM checksum failed' }
+          7z x -bso0 -bsp0 "-o$env:RUNNER_TEMP/llvm" $archive
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Build with LLVM OpenMP
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%p in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do call "%%p\Common7\Tools\VsDevCmd.bat" -arch=amd64
+          python tools/build_windows_rawpy.py "%RUNNER_TEMP%\decoder" "%RUNNER_TEMP%\rawpy-0.28.0-cp313-cp313-win_amd64.whl" --llvm "%RUNNER_TEMP%\llvm"
+      - name: Verify RAW decoder feature flags and pixel equivalence
+        shell: pwsh
+        run: |
+          python -m pip install numpy
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $wheel = (Get-ChildItem "$env:RUNNER_TEMP/decoder/*.whl").FullName
+          python tools/compare_windows_rawpy.py "$env:RUNNER_TEMP/rawpy-0.28.0-cp313-cp313-win_amd64.whl" "$wheel"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Write-Output "VERIFIED_WHEEL_SHA256=$((Get-FileHash $wheel).Hash)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-rawpy-wheel
+          path: ${{ runner.temp }}/decoder/*.whl
+          if-no-files-found: error

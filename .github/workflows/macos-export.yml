@@ -1,0 +1,134 @@
+name: Apple Silicon installed export and OFX
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/macos-export.yml
+      - blender_raw/**
+      - tests/batch_export_format.py
+      - tests/ofx_macos_smoke.py
+      - tests/native_ofx_pipeline.py
+      - tests/fixtures/highlight-chart.dng.gz
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  decoder:
+    uses: ./.github/workflows/prepare-decoder.yml
+  installed-arm64:
+    needs: decoder
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-rawpy-wheel
+          path: blender_raw/wheels
+
+      - name: Mount verified Blender 5.3.0 for Apple Silicon
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          dmg="$RUNNER_TEMP/blender.dmg"
+          curl --fail --silent --show-error --location --retry 3 --output "$dmg" https://download.blender.org/release/Blender5.3/blender-5.3.0-macos-arm64.dmg
+          printf '%s  %s\n' 2d802b54766741e612cead50b03ebbc8eb64dadc71eda932573d256b8a784720 "$dmg" | shasum -a 256 -c -
+          mount="$RUNNER_TEMP/blender-dmg"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount" "$dmg"
+          mkdir -p "$RUNNER_TEMP/blender-profile" "$RUNNER_TEMP/validation"
+          echo "BLENDER=$mount/Blender.app/Contents/MacOS/Blender" >> "$GITHUB_ENV"
+          echo "BLENDER_USER_RESOURCES=$RUNNER_TEMP/blender-profile" >> "$GITHUB_ENV"
+
+      - name: Build the shipped ZIP and install offline
+        run: |
+          set -euo pipefail
+          version=$(python3 -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('blender_raw/blender_manifest.toml').read_text(encoding='utf-8'))['version'])")
+          package="$RUNNER_TEMP/validation/raw_photo_editor-$version.zip"
+          "$BLENDER" -b --factory-startup --offline-mode --command extension build --source-dir blender_raw --output-filepath "$package"
+          shasum -a 256 "$package" > "$RUNNER_TEMP/validation/installer-sha256.txt"
+          "$BLENDER" -b --factory-startup --offline-mode --command extension install-file --repo user_default --enable "$package"
+
+      - name: Verify installed batch JPEG encoding and per-photo isolation
+        id: batch
+        run: |
+          set -euo pipefail
+          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/batch_export_format.py -- --installed 2>&1 | tee "$RUNNER_TEMP/validation/batch-export.log"
+
+      - name: Extract the external official OFX plugin
+        if: ${{ !cancelled() && steps.batch.outcome != 'skipped' }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 --max-time 300 -o "$RUNNER_TEMP/ofx.zip" https://downloads.spektrafilm.114c.de/latest/spektrafilm-OFX-macOS.zip
+          ditto -x -k "$RUNNER_TEMP/ofx.zip" "$RUNNER_TEMP/ofx-package"
+          pkg=$(find "$RUNNER_TEMP/ofx-package" -name '*.pkg' -print -quit)
+          test -n "$pkg"
+          pkgutil --expand-full "$pkg" "$RUNNER_TEMP/ofx-expanded"
+          bundle=$(find "$RUNNER_TEMP/ofx-expanded" -type d -name 'spektrafilm.ofx.bundle' -print -quit)
+          test -n "$bundle"
+          echo "OFX_BUNDLE=$bundle" >> "$GITHUB_ENV"
+
+      - name: Verify installed host permission repair, plugin loading and Metal
+        id: ofx
+        if: ${{ !cancelled() && env.OFX_BUNDLE != '' }}
+        run: |
+          set -euo pipefail
+          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/ofx_macos_smoke.py -- --installed "$OFX_BUNDLE" "$RUNNER_TEMP/validation/installed-ofx-report.json" 2>&1 | tee "$RUNNER_TEMP/validation/installed-ofx.log"
+          python3 -c "import json, os; r=json.load(open(os.environ['RUNNER_TEMP']+'/validation/installed-ofx-report.json')); print('metal_available='+str(r.get('metal_available', False)).lower())" >> "$GITHUB_OUTPUT"
+
+      - name: Verify native OFX nodes, preview, mixed Lite export and alpha
+        id: pipeline
+        if: ${{ !cancelled() && steps.ofx.outputs.metal_available == 'true' }}
+        env:
+          BLENDER_PHOTO_SPEKTRAFILM_OFX: ${{ env.OFX_BUNDLE }}
+        run: |
+          set -euo pipefail
+          "$BLENDER" -b --factory-startup --offline-mode --python-exit-code 1 --python tests/native_ofx_pipeline.py 2>&1 | tee "$RUNNER_TEMP/validation/native-ofx-pipeline.log"
+
+      - name: Summarize completed checks and outstanding GPU validation
+        if: always()
+        env:
+          BATCH_OUTCOME: ${{ steps.batch.outcome }}
+          OFX_OUTCOME: ${{ steps.ofx.outcome }}
+          PIPELINE_OUTCOME: ${{ steps.pipeline.outcome }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          lines = [f"Batch export test: {os.environ['BATCH_OUTCOME']}",
+                   f"Installed OFX test: {os.environ['OFX_OUTCOME']}",
+                   f"Native OFX scene pipeline: {os.environ['PIPELINE_OUTCOME']} (skipped means not verified)"]
+          report = Path(os.environ['RUNNER_TEMP']) / 'validation/installed-ofx-report.json'
+          if report.exists():
+              result = json.loads(report.read_text())
+              lines += [f"Execute permission restored: {result.get('execute_permission_restored', False)}",
+                        f"Official plugin loaded: {result.get('plugin_loaded', False)}"]
+              lines.append('Metal rendering: passed' if result.get('render_passed') is True
+                           else 'Metal rendering: NOT VERIFIED; ' + result.get('error', result.get('render_limitation', 'see test log')))
+          else:
+              lines.append('Installed OFX and Metal rendering: NOT VERIFIED; report unavailable')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('\n\n'.join(lines) + '\n')
+          PY
+
+      - name: Preserve installer and independent validation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installed-export-ofx
+          path: ${{ runner.temp }}/validation/
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 7
+
+      - name: Unmount Blender
+        if: always()
+        run: hdiutil detach "$RUNNER_TEMP/blender-dmg" || true
