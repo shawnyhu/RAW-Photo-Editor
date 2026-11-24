@@ -1,0 +1,2 @@
+# git apply matches the LF context lines in the archived upstream sources.
+blender_raw/vendor/spektrafilm/windows.patch text eol=lf

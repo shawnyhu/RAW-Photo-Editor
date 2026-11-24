@@ -1,0 +1,479 @@
+diff --git a/shaders/vulkan/SpektraPrintScan.comp b/shaders/vulkan/SpektraPrintScan.comp
+index 1ba6e14..9b0363c 100644
+--- a/shaders/vulkan/SpektraPrintScan.comp
++++ b/shaders/vulkan/SpektraPrintScan.comp
+@@ -41,6 +41,8 @@ const uint kFrameFilmDmaxScanB = 101u;
+ const uint kFrameFilmDminScanR = 102u;
+ const uint kFrameFilmDminScanG = 103u;
+ const uint kFrameFilmDminScanB = 104u;
++const uint kFramePrintReferenceBlackY = 105u;
++const uint kFramePrintReferenceWhiteY = 106u;
+ const uint kFrameHdrReferenceWhiteNits = 72u;
+ const uint kFrameHdrPeakNits = 73u;
+ const uint kFrameHdrExposureEv = 74u;
+@@ -1148,8 +1150,8 @@ vec3 apdNeutralExposureScale() {
+   return exp2(vec3(academyPrinterDensityData[offset], academyPrinterDensityData[offset + 1u], academyPrinterDensityData[offset + 2u]) / 12.0);
+ }
+ 
+-vec3 printRawFromFilmDensity(vec3 filmDensityCmy) {
+-  if (u(3u) != 1u && f(7u) == 0.0 && u(8u) == 81u) {
++vec3 printRawFromFilmDensity(vec3 filmDensityCmy, bool useCachedResponse) {
++  if (useCachedResponse && u(3u) != 1u && f(7u) == 0.0 && u(8u) == 81u) {
+     vec3 raw0 = vec3(0.0);
+     vec3 raw1 = vec3(0.0);
+     vec3 raw2 = vec3(0.0);
+@@ -1218,7 +1220,7 @@ vec3 printRawPreflash() {
+ float printMidgrayExposureFactor() {
+   const vec3 midgrayLogRaw = filmLogRawLinearSrgb(vec3(0.184));
+   const vec3 midgrayDensityCmy = developFilmDensity(midgrayLogRaw) + vec3(f(26u), f(27u), f(28u));
+-  const vec3 rawMidgray = max(printRawFromFilmDensity(midgrayDensityCmy), vec3(1.0e-10));
++  const vec3 rawMidgray = max(printRawFromFilmDensity(midgrayDensityCmy, false), vec3(1.0e-10));
+   const float rawMidgrayGeomean = exp((log(rawMidgray.r) + log(rawMidgray.g) + log(rawMidgray.b)) / 3.0);
+   return 1.0 / max(rawMidgrayGeomean, 1.0e-10);
+ }
+@@ -1229,6 +1231,14 @@ vec4 scanDensityToOutputRgbLinearY(
+   bool printStage
+ );
+ 
++vec3 developPrintDensity(vec3 logRaw);
++
++float printReferenceY(vec3 filmDensity, vec3 exposureScale, vec3 preflash) {
++  const vec3 raw = max(printRawFromFilmDensity(filmDensity, false) * exposureScale + preflash, vec3(0.0));
++  const vec3 density = developPrintDensity(log(raw + vec3(1.0e-10)) * kLog10E);
++  return scanDensityToOutputRgbLinearY(density, 0.0, true).a;
++}
++
+ void buildFrameConstants() {
+   const uint wavelengthCount = u(8u);
+   for (uint wavelength = 0u; wavelength < wavelengthCount; ++wavelength) {
+@@ -1244,7 +1254,7 @@ void buildFrameConstants() {
+   }
+   memoryBarrierBuffer();
+   const float exposure = exp2(f(3u));
+-  const vec3 exposureScale = printerLightExposureScale() * printMidgrayExposureFactor() * exposure;
++  const vec3 exposureScale = apdPrinterTimingExposureScale() * printMidgrayExposureFactor() * exposure;
+   const vec3 preflash = printRawPreflash() * exposure;
+   frameFloats[kFramePrintExposureScaleR] = exposureScale.r;
+   frameFloats[kFramePrintExposureScaleG] = exposureScale.g;
+@@ -1252,6 +1262,13 @@ void buildFrameConstants() {
+   frameFloats[kFramePrintPreflashR] = preflash.r;
+   frameFloats[kFramePrintPreflashG] = preflash.g;
+   frameFloats[kFramePrintPreflashB] = preflash.b;
++  if (u(0u) != 1u && u(13u) != 0u && (u(14u) != 0u || u(15u) != 0u)) {
++    // Use the same end-of-roll film densities and paper scan as Metal.
++    const vec3 filmBlack = -vec3(f(58u), f(59u), f(60u));
++    const vec3 filmWhite = vec3(f(16u), f(17u), f(18u));
++    frameFloats[kFramePrintReferenceBlackY] = printReferenceY(filmBlack, exposureScale, preflash);
++    frameFloats[kFramePrintReferenceWhiteY] = printReferenceY(filmWhite, exposureScale, preflash);
++  }
+   const vec4 filmDmaxScan = u(kFrameIntScanNegativeInvert) != 0u
+     ? scanDensityToOutputRgbLinearY(vec3(f(16u), f(17u), f(18u)), 0.0, false)
+     : vec4(0.0);
+@@ -1269,7 +1286,7 @@ void buildFrameConstants() {
+ }
+ 
+ vec3 timedPrintRaw(vec3 filmDensityCmy) {
+-  const vec3 raw = printRawFromFilmDensity(filmDensityCmy);
++  const vec3 raw = printRawFromFilmDensity(filmDensityCmy, true);
+   const vec3 exposureScale = vec3(f(kFramePrintExposureScaleR), f(kFramePrintExposureScaleG), f(kFramePrintExposureScaleB));
+   const vec3 preflash = vec3(f(kFramePrintPreflashR), f(kFramePrintPreflashG), f(kFramePrintPreflashB));
+   return max(raw * exposureScale + preflash, vec3(0.0));
+@@ -1360,12 +1377,17 @@ vec4 scanDensityToOutputRgbLinearY(
+   return vec4(rgb, xyz.y);
+ }
+ 
++float decodeScannerLevel(float value) {
++  value = clamp(value, 0.0, 1.0);
++  return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4);
++}
++
+ vec3 scannerBlackWhiteCorrection(vec3 rgb, float sourceY, float referenceBlackY, float referenceWhiteY) {
+   if (u(13u) == 0u || (u(14u) == 0u && u(15u) == 0u)) {
+     return rgb;
+   }
+-  const float blackLevel = u(15u) != 0u ? f(25u) : referenceBlackY;
+-  const float whiteLevel = u(14u) != 0u ? f(24u) : referenceWhiteY;
++  const float blackLevel = u(15u) != 0u ? decodeScannerLevel(f(25u)) : referenceBlackY;
++  const float whiteLevel = u(14u) != 0u ? decodeScannerLevel(f(24u)) : referenceWhiteY;
+   const float m = (whiteLevel - blackLevel) / max(referenceWhiteY - referenceBlackY, 1.0e-10);
+   const float q = blackLevel - m * referenceBlackY;
+   const float correctedY = clamp(m * sourceY + q, 0.0, 1.0);
+@@ -1376,7 +1398,8 @@ vec3 applyPrintScanOutputContract(vec4 scan) {
+   if (u(kFrameIntOutputRole) == kOutputRoleRcm) {
+     return scan.rgb;
+   }
+-  return scannerBlackWhiteCorrection(scan.rgb, scan.a, 0.0, 1.0);
++  return scannerBlackWhiteCorrection(scan.rgb, scan.a,
++      f(kFramePrintReferenceBlackY), f(kFramePrintReferenceWhiteY));
+ }
+ 
+ vec3 applyFilmScanOutputContract(vec4 scan) {
+diff --git a/src/SpektraAppBridge.mm b/src/SpektraAppBridge.mm
+index abb86b3..e95e97a 100644
+--- a/src/SpektraAppBridge.mm
++++ b/src/SpektraAppBridge.mm
+@@ -1,6 +1,6 @@
+ #include "SpektraAppBridge.h"
+ 
+-#include "SpektraMetalRenderer.h"
++#include "SpektraRenderer.h"
+ #include "SpektraProfileCurves.h"
+ 
+ #include <algorithm>
+@@ -563,7 +563,13 @@ int32_t SpektraRendererRender(
+   window.y1 = 0;
+   window.x2 = std::min(source->width, destination->width);
+   window.y2 = std::min(source->height, destination->height);
+-  const spektrafilm::RenderParams nativeParams = toRendererParams(*params);
++  spektrafilm::RenderParams nativeParams = toRendererParams(*params);
++  // Keep photo-sized intermediate buffers within GPU limits using upstream tiling.
++  // Grain Synthesis requires full-frame pre-grain density in this revision.
++  if (int64_t(window.x2) * window.y2 > 2048 * 1024 &&
++      !(nativeParams.grainEnabled && nativeParams.grainModel == spektrafilm::GrainModel::GrainSynthesis)) {
++    nativeParams.gpuRenderTiling = spektrafilm::GpuRenderTilingMode::Tiled;
++  }
+   const bool ok = renderer->renderer->render(sourceView, destinationView, window, nativeParams, time);
+   if (!ok) {
+     renderer->lastError = renderer->renderer->lastError();
+diff --git a/src/SpektraVulkanRenderer.cpp b/src/SpektraVulkanRenderer.cpp
+index f836426..427a82e 100644
+--- a/src/SpektraVulkanRenderer.cpp
++++ b/src/SpektraVulkanRenderer.cpp
+@@ -105,11 +105,6 @@ std::string envStringAny(
+   return std::string(defaultValue);
+ }
+ 
+-std::filesystem::path envPath(const char *name) {
+-  const char *value = std::getenv(name);
+-  return value && value[0] ? std::filesystem::path(value) : std::filesystem::path();
+-}
+-
+ std::filesystem::path modulePath() {
+ #if defined(_WIN32)
+   HMODULE module = nullptr;
+@@ -144,30 +139,11 @@ std::filesystem::path modulePath() {
+ }
+ 
+ std::filesystem::path findResourcePath(const std::filesystem::path &relativePath) {
+-  std::vector<std::filesystem::path> directories;
+-  if (std::filesystem::path resourceDir = envPath("SPEKTRAFILM_RESOURCE_DIR"); !resourceDir.empty()) {
+-    directories.push_back(resourceDir);
+-  }
+-
+-  const std::filesystem::path imagePath = modulePath();
+-  if (!imagePath.empty()) {
+-    const std::filesystem::path contentsPath = imagePath.parent_path().parent_path();
+-    if (!contentsPath.empty()) {
+-      directories.push_back(contentsPath / "Resources");
+-    }
+-    if (!imagePath.parent_path().empty()) {
+-      directories.push_back(imagePath.parent_path());
+-    }
+-  }
+-
+-  directories.push_back(std::filesystem::current_path());
+-
+-  for (const std::filesystem::path &directory : directories) {
+-    const std::filesystem::path candidate = directory / relativePath;
++  const auto image = modulePath();
++  if (!image.empty()) {
++    const auto path = image.parent_path() / relativePath;
+     std::error_code ec;
+-    if (std::filesystem::is_regular_file(candidate, ec)) {
+-      return candidate;
+-    }
++    if (std::filesystem::is_regular_file(path, ec)) return path;
+   }
+   return {};
+ }
+@@ -356,6 +332,10 @@ bool copyMappedBytesRegionToWindow(
+     return false;
+   }
+ 
++  if (sourceX == 0 && sourceY == 0 && sourceWidth == width) {
++    return copyMappedBytesToWindow(sourceBytes, sourceByteCount, destination, window, width, height);
++  }
++
+   const int32_t pixelBytes = destination.components * destination.bytesPerComponent;
+   const int32_t sourceRowBytes = sourceWidth * pixelBytes;
+   const int32_t copyRowBytes = width * pixelBytes;
+@@ -1311,7 +1291,7 @@ struct VulkanDiffusionComponent {
+ static_assert(sizeof(VulkanDiffusionInfo) == 16u);
+ static_assert(sizeof(VulkanDiffusionComponent) == 16u);
+ 
+-constexpr uint32_t kCoreFrameFloatCount = 105u;
++constexpr uint32_t kCoreFrameFloatCount = 107u;
+ constexpr uint32_t kCoreFrameIntCount = 29u;
+ constexpr uint32_t kCoreHalationSetCount = 13u;
+ constexpr uint32_t kCoreDiffusionSetCount = 3u;
+@@ -1586,6 +1566,14 @@ private:
+     available = true;
+   }
+ 
++  static bool supportsFilmCompute(const VkPhysicalDeviceProperties &props) {
++    const auto &limits = props.limits;
++    return limits.maxPerStageDescriptorStorageBuffers >= 31 &&
++           limits.maxDescriptorSetStorageBuffers >= 31 &&
++           limits.maxComputeWorkGroupInvocations >= 256 &&
++           limits.maxComputeWorkGroupSize[0] >= 256 && limits.maxComputeWorkGroupSize[1] >= 8;
++  }
++
+   bool selectPhysicalDevice() {
+     uint32_t deviceCount = 0;
+     VkResult result = vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+@@ -1620,6 +1608,10 @@ private:
+       physicalDevice = candidate;
+       computeQueueFamily = queueFamily;
+       vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
++      if (!supportsFilmCompute(physicalDeviceProperties)) {
++        lastError = "The requested device cannot bind 31 storage buffers and run 256-thread workgroups.";
++        return false;
++      }
+       return true;
+     }
+ 
+@@ -1633,6 +1625,7 @@ private:
+ 
+       VkPhysicalDeviceProperties properties{};
+       vkGetPhysicalDeviceProperties(candidate, &properties);
++      if (!supportsFilmCompute(properties)) continue;
+       const int score = physicalDeviceTypeScore(properties.deviceType) + (dedicatedCompute ? 100 : 0);
+       if (score > bestScore) {
+         bestScore = score;
+@@ -1643,7 +1636,7 @@ private:
+     }
+ 
+     if (physicalDevice == VK_NULL_HANDLE) {
+-      lastError = "No Vulkan compute-capable queue family is available.";
++      lastError = "No Vulkan compute device supports 31 storage buffers and 256-thread workgroups.";
+       return false;
+     }
+     return true;
+@@ -3363,6 +3356,11 @@ bool VulkanRenderer::Impl::createBuffer(
+   VkDeviceSize *allocatedBytes,
+   VkMemoryPropertyFlags *actualMemoryFlags
+ ) {
++  if ((usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) && size > physicalDeviceProperties.limits.maxStorageBufferRange) {
++    lastError = "Film buffer exceeds this Vulkan device's storage buffer range (" +
++                std::to_string(physicalDeviceProperties.limits.maxStorageBufferRange) + " bytes).";
++    return false;
++  }
+   VkBufferCreateInfo bufferInfo{};
+   bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+   bufferInfo.size = size;
+@@ -6638,55 +6636,36 @@ bool VulkanRenderer::Impl::renderCoreBootstrap(
+     );
+     vkCmdPushConstants(commandBuffer, copyPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(formatPushConstants), formatPushConstants);
+     vkCmdDispatch(commandBuffer, formatGroups, 1, 1);
++  }
+ 
+-    VkMemoryBarrier readbackBarrier{};
+-    readbackBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+-    readbackBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+-    readbackBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+-    vkCmdPipelineBarrier(
+-      commandBuffer,
+-      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+-      VK_PIPELINE_STAGE_TRANSFER_BIT,
+-      0,
+-      1,
+-      &readbackBarrier,
+-      0,
+-      nullptr,
+-      0,
+-      nullptr
+-    );
+-
+-    VkBufferCopy destinationDownloadRegion{};
+-    destinationDownloadRegion.size = halfByteCount;
+-    vkCmdCopyBuffer(commandBuffer, coreFrame.destinationHalf.buffer, coreFrame.destinationHalfStaging.buffer, 1, &destinationDownloadRegion);
+-  } else {
+-    VkMemoryBarrier readbackBarrier{};
+-    readbackBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+-    readbackBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+-    readbackBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+-    vkCmdPipelineBarrier(
+-      commandBuffer,
+-      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+-      VK_PIPELINE_STAGE_TRANSFER_BIT,
+-      0,
+-      1,
+-      &readbackBarrier,
+-      0,
+-      nullptr,
+-      0,
+-      nullptr
+-    );
++  VkMemoryBarrier readbackBarrier{};
++  readbackBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
++  readbackBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
++  readbackBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
++  vkCmdPipelineBarrier(
++    commandBuffer,
++    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
++    VK_PIPELINE_STAGE_TRANSFER_BIT,
++    0,
++    1,
++    &readbackBarrier,
++    0,
++    nullptr,
++    0,
++    nullptr
++  );
+ 
+-    VkBufferCopy destinationDownloadRegion{};
+-    destinationDownloadRegion.size = pixelStorageByteCount;
+-    vkCmdCopyBuffer(
+-      commandBuffer,
+-      coreFrame.destination.buffer,
+-      destinationIsHalf ? coreFrame.destinationHalfStaging.buffer : coreFrame.destinationStaging.buffer,
+-      1,
+-      &destinationDownloadRegion
+-    );
+-  }
++  // Read back the tile center's rows in a single transfer. Copy their useful
++  // columns straight into the caller's final image, including strided views.
++  const VkDeviceSize outputRowBytes = static_cast<VkDeviceSize>(width) *
++    destination.components * destination.bytesPerComponent;
++  VkBufferCopy download{};
++  download.srcOffset = centerRect.y * outputRowBytes;
++  download.size = centerRect.height * outputRowBytes;
++  ScratchBuffer &readbackStaging = destinationIsHalf ? coreFrame.destinationHalfStaging : coreFrame.destinationStaging;
++  vkCmdCopyBuffer(commandBuffer,
++    destinationFormatConvert ? coreFrame.destinationHalf.buffer : coreFrame.destination.buffer,
++    readbackStaging.buffer, 1, &download);
+ 
+   VkMemoryBarrier hostBarrier{};
+   hostBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+@@ -6738,23 +6717,21 @@ bool VulkanRenderer::Impl::renderCoreBootstrap(
+   diagnostics.commandBufferMs = elapsedMilliseconds(commandStart, commandEnd);
+ 
+   const PerfClock::time_point outputCopyStart = PerfClock::now();
+-  ScratchBuffer &readbackStaging = destinationIsHalf ? coreFrame.destinationHalfStaging : coreFrame.destinationStaging;
+-  const VkDeviceSize readbackByteCount = destinationIsHalf ? halfByteCount : byteCount;
+   if (!readbackStaging.mapped) {
+     lastError = "Vulkan destination staging buffer is not mapped.";
+     return false;
+   }
+-  if (!invalidateMappedScratchBuffer(readbackStaging, readbackByteCount, "core destination staging")) {
++  if (!invalidateMappedScratchBuffer(readbackStaging, download.size, "core destination staging")) {
+     return false;
+   }
+-  if (!copyMappedBytesToWindow(
+-        readbackStaging.mapped,
+-        static_cast<size_t>(readbackByteCount),
+-        destination,
+-        window,
+-        width,
+-        height
+-      )) {
++  const int32_t outputX = window.x1 + static_cast<int32_t>(centerRect.x);
++  const int32_t outputY = window.y1 + static_cast<int32_t>(centerRect.y);
++  const RenderWindow outputWindow{outputX, outputY,
++    outputX + static_cast<int32_t>(centerRect.width), outputY + static_cast<int32_t>(centerRect.height)};
++  if (!copyMappedBytesRegionToWindow(
++        readbackStaging.mapped, static_cast<size_t>(download.size),
++        width, centerRect.height, centerRect.x, 0,
++        destination, outputWindow, centerRect.width, centerRect.height)) {
+     lastError = "The requested render window does not fit inside the Vulkan destination image view.";
+     return false;
+   }
+@@ -7574,7 +7551,6 @@ bool VulkanRenderer::Impl::renderTiledBootstrap(
+   aggregate.tileOverlap = overlap;
+   aggregate.uploadBytes = static_cast<uint64_t>(fullSourceByteCount);
+ 
+-  const int32_t pixelBytes = destination.components * destination.bytesPerComponent;
+   bool capturedPassList = false;
+   uint32_t tileIndex = 0u;
+   for (uint32_t tileY = 0u; tileY < tileRows; ++tileY) {
+@@ -7606,28 +7582,6 @@ bool VulkanRenderer::Impl::renderTiledBootstrap(
+         return false;
+       }
+ 
+-      const uint64_t tileByteCount =
+-        static_cast<uint64_t>(workingWidth) *
+-        static_cast<uint64_t>(workingHeight) *
+-        static_cast<uint64_t>(pixelBytes);
+-      if (tileByteCount > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+-        lastError = "The Vulkan tiled planner produced a tile larger than host address space.";
+-        diagnostics = aggregate;
+-        updateSharedDiagnostics();
+-        return false;
+-      }
+-
+-      std::vector<uint8_t> tileOutput(static_cast<size_t>(tileByteCount));
+-      MutableImageView tileDestination{};
+-      tileDestination.data = tileOutput.data();
+-      tileDestination.x1 = workingX0;
+-      tileDestination.y1 = workingY0;
+-      tileDestination.width = workingWidth;
+-      tileDestination.height = workingHeight;
+-      tileDestination.rowBytes = workingWidth * pixelBytes;
+-      tileDestination.components = destination.components;
+-      tileDestination.bytesPerComponent = destination.bytesPerComponent;
+-
+       activeTileContext.enabled = true;
+       activeTileContext.fullWidth = static_cast<uint32_t>(fullWidth);
+       activeTileContext.fullHeight = static_cast<uint32_t>(fullHeight);
+@@ -7640,7 +7594,7 @@ bool VulkanRenderer::Impl::renderTiledBootstrap(
+       activeTileContext.halationBoostMilestoneEnabled = halationBoostMilestoneEnabled;
+       activeTileContext.fullFrameSource = true;
+       const RenderWindow workingWindow{workingX0, workingY0, workingX1, workingY1};
+-      const bool tileOk = renderCoreBootstrap(source, tileDestination, workingWindow, tileParams, time);
++      const bool tileOk = renderCoreBootstrap(source, destination, workingWindow, tileParams, time);
+       activeTileContext = {};
+ 
+       const RendererDiagnostics tileDiagnostics = diagnostics;
+@@ -7728,25 +7682,6 @@ bool VulkanRenderer::Impl::renderTiledBootstrap(
+         updateSharedDiagnostics();
+         return false;
+       }
+-
+-      const RenderWindow centerWindow{centerX0, centerY0, centerX1, centerY1};
+-      if (!copyMappedBytesRegionToWindow(
+-            tileOutput.data(),
+-            tileOutput.size(),
+-            workingWidth,
+-            workingHeight,
+-            centerX0 - workingX0,
+-            centerY0 - workingY0,
+-            destination,
+-            centerWindow,
+-            centerWidth,
+-            centerHeight
+-          )) {
+-        lastError = "Vulkan tiled render failed to copy a tile center into the destination image view.";
+-        diagnostics = aggregate;
+-        updateSharedDiagnostics();
+-        return false;
+-      }
+     }
+   }
+ 
+@@ -7852,6 +7787,26 @@ bool VulkanRenderer::render(
+   return false;
+ }
+ 
++bool probeVulkanRenderer(std::string &message) {
++  const auto checkTable = [&](const char *name, size_t elements) {
++    std::error_code ec;
++    if (std::filesystem::file_size(findResourcePath(name), ec) == elements * sizeof(float) && !ec) {
++      return true;
++    }
++    message = std::string("Missing or invalid Spektrafilm table: ") + name;
++    return false;
++  };
++  if (!checkTable("SpektraHanatos2025Spectra.f32", hanatosSpectraLutInfo().elementCount) ||
++      !checkTable("SpektraOutputGamutCompression.f32", kSpektraOutputGamutCompressionElementCount)) {
++    return false;
++  }
++  // Creating the shared backend loads every SPIR-V module and compute pipeline.
++  auto backend = acquireVulkanSharedBackend(message);
++  if (!backend) return false;
++  message = backend->physicalDeviceProperties.deviceName;
++  return true;
++}
++
+ std::unique_ptr<Renderer> createNativeRenderer() {
+   return std::make_unique<VulkanRenderer>();
+ }

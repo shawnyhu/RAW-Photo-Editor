@@ -1,0 +1,21 @@
+# Changelog
+
+## 1.0.1 — 2026-11-24
+
+RAW Photo Editor is a lightweight, open-source RAW photo editor that runs offline inside Blender. This release includes non-destructive RAW development, crop and perspective correction, Spektrafilm Lite and full-resolution batch export for Windows x64 and Apple Silicon.
+
+Install `raw_photo_editor-1.0.1.zip` from **Preferences → Get Extensions → Install from Disk** in Blender 5.3 or later. If upgrading from the old `blender_raw` extension, disable it before enabling `raw_photo_editor`.
+
+- Read official OFX help and factory look menus from the installed plug-in. Saved recipes keep their control IDs and numeric mappings.
+- Windows RAW decoding uses LLVM OpenMP. Apple Silicon uses the existing decoder.
+- Removed four bundled DCP files. Current automatic calibration and user-selected DCP, ICC and LUT inputs are still available. Older recipes that specifically used a bundled DCP can select the original profile externally.
+- Added the CIE standard-observer credit and license, and a source distribution for public release.
+
+## 1.0.0 — 2026-11-24
+
+First stable release of Blender Photo Editor for Blender 5.3 on Windows x64 and Apple Silicon.
+
+- **Crop & Perspective** adds free cropping, six fixed aspect ratios, an original-ratio lock and a landscape/portrait toggle. Rotate to straighten and use **Fit** to keep the largest frame inside the image.
+- **Four Guides** uses two horizontal and two vertical references to correct the entire photograph. **Auto Detect** finds candidate lines and lets you refine them by hand.
+- **Photo Gallery** keeps an independent compositor stack for each photo. The stable toolset includes RAW development, Spektrafilm Lite, optional official OFX processing, copying adjustments, and full-resolution batch export.
+- **Upgrading** from the crop demo or 0.20.3 uses the same extension ID and photo-scene format. For projects made in 0.18.x or earlier, start a new Photo Workspace and reimport the originals.

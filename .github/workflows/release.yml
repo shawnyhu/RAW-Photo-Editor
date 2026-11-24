@@ -191,7 +191,7 @@ jobs:
               test "$(jq -r .targetCommitish "$RUNNER_TEMP/existing-release.json")" = "$GITHUB_SHA"
             fi
           else
-            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "RAW Photo Editor for Blender $VERSION" --notes-file ../release-notes.md
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "RAW Photo Editor $VERSION" --notes-file ../release-notes.md
           fi
           # Complete an interrupted draft without ever overwriting a published asset.
           for file in "$PACKAGE" "$PACKAGE.sha256" "$src" "$src.sha256"; do

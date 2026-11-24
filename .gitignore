@@ -1,0 +1,11 @@
+/DNG for Test/
+/dist/
+.DS_Store
+__pycache__/
+.native-test-deps/
+.native-test-output/
+/native-ui.*.log
+*.py[cod]
+*.blend
+!/blender_raw/assets/photo_workspace.blend
+*.blend[0-9]*

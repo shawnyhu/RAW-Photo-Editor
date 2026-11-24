@@ -1,0 +1,106 @@
+diff --git a/src/SpektraMetalRenderer.mm b/src/SpektraMetalRenderer.mm
+index 0a81297..4411386 100644
+--- a/src/SpektraMetalRenderer.mm
++++ b/src/SpektraMetalRenderer.mm
+@@ -32,70 +32,13 @@
+ int bundleImageAnchor = 0;
+ 
+ NSURL *findBundleResourceURL(NSString *name, NSString *extension) {
+-  NSArray<NSString *> *bundleIdentifiers = @[
+-    @"org.spektrafilm",
+-    @"org.spektrafilm.flow",
+-    @"org.spektrafilm.dev"
+-  ];
+-  for (NSString *bundleIdentifier in bundleIdentifiers) {
+-    NSBundle *pluginBundle = [NSBundle bundleWithIdentifier:bundleIdentifier];
+-    if (pluginBundle) {
+-      NSURL *url = [pluginBundle URLForResource:name withExtension:extension];
+-      if (url) {
+-        return url;
+-      }
+-    }
+-  }
+-  for (NSBundle *candidate in [NSBundle allBundles]) {
+-    NSURL *url = [candidate URLForResource:name withExtension:extension];
+-    if (url) {
+-      return url;
+-    }
+-  }
+-  NSString *fallback = [[NSBundle mainBundle] pathForResource:name ofType:extension];
+-  if (fallback) {
+-    return [NSURL fileURLWithPath:fallback];
+-  }
+-
+-  NSMutableArray<NSString *> *fallbackDirectories = [NSMutableArray array];
+-  NSString *resourceDir = [[[NSProcessInfo processInfo] environment] objectForKey:@"SPEKTRAFILM_RESOURCE_DIR"];
+-  if ([resourceDir length] > 0) {
+-    [fallbackDirectories addObject:resourceDir];
+-  }
+-  NSString *mainResourcePath = [[NSBundle mainBundle] resourcePath];
+-  if ([mainResourcePath length] > 0) {
+-    [fallbackDirectories addObject:mainResourcePath];
+-  }
+-  Dl_info imageInfo;
+-  if (dladdr(&bundleImageAnchor, &imageInfo) != 0 && imageInfo.dli_fname) {
+-    NSString *imagePath = [NSString stringWithUTF8String:imageInfo.dli_fname];
+-    NSString *imageDirectory = [imagePath stringByDeletingLastPathComponent];
+-    NSString *contentsDirectory = [imageDirectory stringByDeletingLastPathComponent];
+-    if ([contentsDirectory length] > 0) {
+-      [fallbackDirectories addObject:[contentsDirectory stringByAppendingPathComponent:@"Resources"]];
+-    }
+-    if ([imageDirectory length] > 0) {
+-      [fallbackDirectories addObject:imageDirectory];
+-    }
+-  }
+-  NSString *executablePath = [[NSBundle mainBundle] executablePath];
+-  NSString *executableDirectory = [executablePath stringByDeletingLastPathComponent];
+-  if ([executableDirectory length] > 0) {
+-    [fallbackDirectories addObject:executableDirectory];
+-  }
+-  NSString *currentDirectory = [[NSFileManager defaultManager] currentDirectoryPath];
+-  if ([currentDirectory length] > 0) {
+-    [fallbackDirectories addObject:currentDirectory];
+-  }
+-
+-  NSFileManager *fileManager = [NSFileManager defaultManager];
+-  for (NSString *directory in fallbackDirectories) {
+-    NSString *path = [[directory stringByAppendingPathComponent:name] stringByAppendingPathExtension:extension];
+-    if ([fileManager fileExistsAtPath:path]) {
+-      return [NSURL fileURLWithPath:path];
+-    }
+-  }
+-  return nil;
++  // Resolve exclusively against the Blender extension's own pinned resources.
++  Dl_info imageInfo{};
++  if (dladdr(&bundleImageAnchor, &imageInfo) == 0 || !imageInfo.dli_fname) return nil;
++  NSString *dylib = [NSString stringWithUTF8String:imageInfo.dli_fname];
++  NSString *file = [name stringByAppendingPathExtension:extension];
++  NSString *path = [[dylib stringByDeletingLastPathComponent] stringByAppendingPathComponent:file];
++  return [[NSFileManager defaultManager] fileExistsAtPath:path] ? [NSURL fileURLWithPath:path] : nil;
+ }
+ 
+ using PerfClock = std::chrono::steady_clock;
+@@ -3475,14 +3418,17 @@ bool prepareStaticResources(const RenderParams &params) {
+         return;
+       }
+ 
+-      NSURL *libraryURL = findBundleResourceURL(@"SpektraFilm", @"metallib");
+-      if (!libraryURL) {
+-        lastError = "Unable to locate SpektraFilm.metallib in bundle resources.";
++      NSURL *libraryURL = findBundleResourceURL(@"SpektraFilm", @"metal");
++      NSError *error = nil;
++      NSString *source = libraryURL ? [NSString stringWithContentsOfURL:libraryURL
++                                        encoding:NSUTF8StringEncoding error:&error] : nil;
++      if (!source) {
++        lastError = error ? [[error localizedDescription] UTF8String] : "Missing SpektraFilm.metal";
+         return;
+       }
+-
+-      NSError *error = nil;
+-      id<MTLLibrary> library = [device newLibraryWithURL:libraryURL error:&error];
++      MTLCompileOptions *compile = [[MTLCompileOptions alloc] init];
++      compile.fastMathEnabled = NO;
++      id<MTLLibrary> library = [device newLibraryWithSource:source options:compile error:&error];
+       if (!library) {
+         lastError = error ? [[error localizedDescription] UTF8String] : "Unable to load Metal library.";
+         return;

@@ -1,0 +1,50 @@
+[
+  {
+    "make": "Canon",
+    "model": "Canon EOS R8 Mark II",
+    "source": "matrix",
+    "illuminant": 21,
+    "color_matrix": [
+      0.9539,
+      -0.2795,
+      -0.1224,
+      -0.4175,
+      1.1998,
+      0.2458,
+      -0.0465,
+      0.1755,
+      0.6048
+    ],
+    "upstream": "https://github.com/pch/rawmakase/blob/3c5441375a8a55c081cf8976cfc94f7f97c86ed2/data/raw-matrices.toml",
+    "notice": "MIT, Copyright (c) 2026 RAWmakase contributors"
+  },
+  {
+    "make": "Leica Camera AG",
+    "model": "LEICA M10-R",
+    "source": "embedded"
+  },
+  {
+    "make": "Sigma",
+    "model": "Sigma FP2",
+    "source": "embedded"
+  },
+  {
+    "make": "SONY",
+    "model": "ILCE-7RM6",
+    "source": "matrix",
+    "illuminant": 21,
+    "color_matrix": [
+      1.1765,
+      -0.5595,
+      -0.1192,
+      -0.3689,
+      1.1507,
+      0.2485,
+      0.0051,
+      0.0681,
+      0.5731
+    ],
+    "upstream": "https://github.com/pch/rawmakase/blob/3c5441375a8a55c081cf8976cfc94f7f97c86ed2/data/raw-matrices.toml",
+    "notice": "MIT, Copyright (c) 2026 RAWmakase contributors"
+  }
+]
