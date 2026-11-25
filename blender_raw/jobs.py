@@ -16,6 +16,7 @@ from . import catalog
 
 
 _pending = OrderedDict()
+_thumbnails = OrderedDict()
 _active = {}
 _export = None
 _summary = ""
@@ -134,7 +135,7 @@ def open_preview(photo):
 
 def thumbnail_later(photo):
     if not photo.thumbnail_path or not photo.get("thumbnail_bytes"):
-        _pending[(photo.uid, "thumb")] = time.monotonic()
+        _thumbnails[photo.uid] = None
 
 
 def _developer_key(photo, node):
@@ -198,6 +199,64 @@ def _fail(photo, mode, exc, node=None):
         photo["thumbnail_error"] = str(exc)
 
 
+def _start_preview(key):
+    photo = catalog.lookup_photo(bpy.context.scene, key[0])
+    if not photo:
+        return
+    node = None
+    try:
+        node = _developer(key, photo) if key[1] == "developer" else None
+        if key[1] == "developer" and node is None:
+            return
+        req = catalog.request(photo, "preview" if node is not None else key[1], recipe=node)
+        if (Path(req["output"]).is_file() or
+                (key[1] != "thumb" and catalog.packed_decode(photo, req, node))):
+            _applied(photo, req, node)
+            redraw()
+        else:
+            process, scratch = _start(req)
+            _active[key] = (process, scratch, req)
+            if key[1] != "thumb":
+                redraw()
+    except Exception as exc:
+        _fail(photo, key[1], exc, node)
+        redraw()
+
+
+def _schedule_previews():
+    if len(_active) >= 2:
+        return
+    if _pending:
+        lib = catalog.library(bpy.context)
+        active_uid = lib.photos[lib.active_index].uid if 0 <= lib.active_index < len(lib.photos) else None
+        # A switch promotes both the Reader and its queued Developer recipes.
+        # Limit synchronous cache loads as well as concurrent subprocesses.
+        now = time.monotonic()
+        focused = [key for key in _pending if key[0] == active_uid and key not in _active]
+        keys = sorted(focused, key=lambda key: key[1] != "preview") if focused else list(_pending)
+        started = 0
+        for key in keys:
+            if key not in _active and _pending[key] <= now:
+                del _pending[key]
+                _start_preview(key)
+                started += 1
+                if len(_active) >= 2 or started == 2:
+                    break
+        # Keep the other slot free if the current recipe is still debouncing.
+        if _active and any(key in _pending for key in focused):
+            return
+    # Leave a worker available for editing even when every thumbnail is uncached.
+    # A warm Gallery can consume several on-disk thumbnails within one UI tick.
+    deadline = time.monotonic() + 0.01
+    for _ in range(8):
+        if not _thumbnails or len(_active) >= 2 or any(key[1] == "thumb" for key in _active):
+            break
+        uid, _ = _thumbnails.popitem(last=False)
+        _start_preview((uid, "thumb"))
+        if time.monotonic() >= deadline:
+            break
+
+
 def tick():
     _poll_export()
     for key, (process, scratch, req) in list(_active.items()):
@@ -222,34 +281,8 @@ def tick():
         finally:
             scratch.cleanup()
         redraw()
-    for key, due in list(_pending.items()):
-        if len(_active) >= 2:
-            break
-        if key in _active or due > time.monotonic():
-            continue
-        del _pending[key]
-        photo = catalog.lookup_photo(bpy.context.scene, key[0])
-        if not photo:
-            continue
-        node = None
-        try:
-            node = _developer(key, photo) if key[1] == "developer" else None
-            if key[1] == "developer" and node is None:
-                continue
-            req = catalog.request(photo, "preview" if node is not None else key[1], recipe=node)
-            if (Path(req["output"]).is_file() or
-                    (key[1] != "thumb" and catalog.packed_decode(photo, req, node))):
-                _applied(photo, req, node)
-                redraw()
-            else:
-                process, scratch = _start(req)
-                _active[key] = (process, scratch, req)
-                if key[1] != "thumb":
-                    redraw()
-        except Exception as exc:
-            _fail(photo, key[1], exc, node)
-            redraw()
-    return 0.12 if _pending or _active or _export else 0.5
+    _schedule_previews()
+    return 0.12 if _pending or _thumbnails or _active or _export else 0.5
 
 
 def export_status():
@@ -273,6 +306,43 @@ def export_progress():
 
 def export_details():
     return _details
+
+
+def _export_bindings(photos, library):
+    """Resolve paths before the snapshot moves, following the selected render graphs."""
+    from . import compositor, scene_pipeline
+    bindings = {}
+    def binding(uid):
+        if uid not in bindings:
+            bindings[uid] = {"source": "", "profiles": {}, "luts": {}}
+        return bindings[uid]
+
+    for photo in photos:
+        binding(photo.uid)
+        for effect, node, parents in scene_pipeline.upstream(photo.scene, mode='RENDER'):
+            if node.bl_idname == compositor.READER_TYPE:
+                binding(node.photo_uid)
+                continue
+            if node.bl_idname != compositor.DEVELOPER_TYPE or node.id_data.library:
+                continue
+            profile = (catalog.has_custom_input(node) and node.profile_path and
+                       (not node.profile_blob or node.get("embedded_profile_path") != node.profile_path))
+            lut = node.look == "LUT" and node.lut_path and not node.lut_blob
+            if not (profile or lut):
+                continue
+            # A Developer can read a different photo, also through a nested group.
+            for _, reader, _ in scene_pipeline.upstream(photo.scene, node.inputs[:1], effect=effect,
+                                                        parents=parents, mode='RENDER'):
+                if reader.bl_idname == compositor.READER_TYPE:
+                    paths = binding(reader.photo_uid)
+                    if profile:
+                        paths["profiles"][node.instance_uid] = str(catalog.linked_profile(node))
+                    if lut:
+                        paths["luts"][node.instance_uid] = str(catalog.linked_lut(node))
+    for entry in library.photos:
+        if entry.uid in bindings and not entry.packed:
+            bindings[entry.uid]["source"] = str(catalog.linked_file(entry))
+    return bindings
 
 
 def start_export(context, photos, directory, fmt="", *, output_settings_scene=None):
@@ -310,18 +380,7 @@ def start_export(context, photos, directory, fmt="", *, output_settings_scene=No
     items = naming.export_items(photos, directory, ext, library)
     if not items:
         raise ValueError("Select at least one photo to export")
-    bindings = {}
-    for entry in library.photos:
-        source = str(catalog.linked_file(entry)) if not entry.packed else ""
-        profiles = {}
-        luts = {}
-        for node in compositor.developers_for(entry):
-            if catalog.has_custom_input(node) and node.profile_path:
-                if not node.profile_blob or node.get("embedded_profile_path") != node.profile_path:
-                    profiles[node.instance_uid] = str(catalog.linked_profile(node))
-            if node.look == "LUT" and node.lut_path and not node.lut_blob:
-                luts[node.instance_uid] = str(catalog.linked_lut(node))
-        bindings[entry.uid] = {"source": source, "profiles": profiles, "luts": luts}
+    bindings = _export_bindings(photos, library)
     snapshot_dir = tempfile.TemporaryDirectory(prefix="BlenderPhotoEditor-export-")
     try:
         folder = Path(snapshot_dir.name)
@@ -389,6 +448,11 @@ def cancel_export():
 
 def stop_previews(photo_uids=None):
     """Stop thumbnail/develop work for removed photos, or all previews on file load."""
+    if photo_uids is None:
+        _thumbnails.clear()
+    else:
+        for uid in photo_uids:
+            _thumbnails.pop(uid, None)
     for key in list(_pending):
         if photo_uids is None or key[0] in photo_uids:
             del _pending[key]

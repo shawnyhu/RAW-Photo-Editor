@@ -489,15 +489,32 @@ def lookup_photo(scene, uid):
     return None
 
 
-def add_photo(context, path, embed=False):
+def photo_path_index(photos):
+    """Index the first matching entry, just as a single-file import does."""
+    by_path = {}
+    for index, photo in enumerate(photos):
+        try:
+            path = linked_file(photo)
+        except (OSError, RuntimeError, ValueError):
+            # A broken link in a saved catalog cannot identify an incoming file.
+            continue
+        by_path.setdefault(path, index)
+    return by_path
+
+
+def add_photo(context, path, embed=False, *, path_index=None):
     path = Path(path).resolve()
     lib = library(context)
     lib.owner = True
-    for photo in lib.photos:
-        if linked_file(photo) == path:
-            if embed:
-                pack_photo(photo)
-            return photo, False
+    if path_index is None:
+        photo = next((p for p in lib.photos if linked_file(p) == path), None)
+    else:
+        index = path_index.get(path)
+        photo = lib.photos[index] if index is not None else None
+    if photo is not None:
+        if embed:
+            pack_photo(photo)
+        return photo, False
     if not path.is_file():
         raise FileNotFoundError(path)
     photo = lib.photos.add()
@@ -519,6 +536,8 @@ def add_photo(context, path, embed=False):
         raise
     if lib.active_index < 0:
         lib.active_index = len(lib.photos) - 1
+    if path_index is not None:
+        path_index[path] = len(lib.photos) - 1
     return photo, True
 
 

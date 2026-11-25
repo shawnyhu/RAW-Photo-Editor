@@ -57,6 +57,9 @@ jobs:
           set -euo pipefail
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/native_install_smoke.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/batch_export_format.py -- --installed
+          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/import_batch_paths.py
+          "$BLENDER" -b --factory-startup --offline-mode --python-exit-code 1 --python tests/preview_scheduling.py
+          "$BLENDER" -b --factory-startup --offline-mode --python-exit-code 1 --python tests/native_source_binding.py
       - name: Exercise installed crop node and pixel output
         shell: bash
         run: |
@@ -125,6 +128,12 @@ jobs:
           & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/native_install_smoke.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/batch_export_format.py -- --installed
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $blender -b --offline-mode --python-exit-code 1 --python tests/import_batch_paths.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $blender -b --factory-startup --offline-mode --python-exit-code 1 --python tests/preview_scheduling.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $blender -b --factory-startup --offline-mode --python-exit-code 1 --python tests/native_source_binding.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/crop_perspective.py
           $testExitCode = $LASTEXITCODE

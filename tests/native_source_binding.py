@@ -80,6 +80,27 @@ def check_nested_reconciliation(photo, other):
     assert node.photo_uid == other.uid
     assert node.node_tree.nodes["Developed RAW"].image is None
 
+    # Export the first photo with a render-only Reader bound to the second.
+    # File paths must travel with that Reader, even inside a nested Developer.
+    from blender_raw import jobs
+    reader_effect.enable_for_preview = False
+    other.filepath = str(Path(__file__).resolve())
+    node.camera_input = 'ICC'
+    node.profile_path = str(Path(__file__).with_name('external.icc'))
+    node.look = 'LUT'
+    node.lut_path = str(Path(__file__).parent / 'fixtures' / 'half-green.cube')
+    with patch.object(compositor, 'developer_source', side_effect=AssertionError('Global source search')):
+        bindings = jobs._export_bindings([photo], catalog.library(bpy.context))
+    assert set(bindings) == {photo.uid, other.uid}
+    assert bindings[other.uid] == {
+        'source': str(catalog.linked_file(other)),
+        'profiles': {node.instance_uid: str(catalog.linked_profile(node))},
+        'luts': {node.instance_uid: str(catalog.linked_lut(node))},
+    }
+    effect.enable_for_render = False
+    bindings = jobs._export_bindings([photo], catalog.library(bpy.context))
+    assert not bindings[other.uid]['profiles'] and not bindings[other.uid]['luts']
+
 
 def check_render_only_controls(photo):
     scene = compositor.ensure_photo_scene(bpy.context, photo)

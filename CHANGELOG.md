@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2-beta.1 — 2026-11-25
+
+- Start a selected photo's RAW preview while Gallery thumbnails are being generated. One thumbnail worker can run alongside interactive development.
+- Resolve linked originals, camera profiles and LUTs for the selected render graphs when starting an export. Cross-photo Readers and render-only effects are included.
+- Index existing original paths once per multi-file import so duplicate checks scale to larger galleries.
+
 ## 1.0.1 — 2026-11-24
 
 RAW Photo Editor is a lightweight, open-source RAW photo editor that runs offline inside Blender. This release includes non-destructive RAW development, crop and perspective correction, Spektrafilm Lite and full-resolution batch export for Windows x64 and Apple Silicon.

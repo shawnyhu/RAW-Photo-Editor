@@ -38,7 +38,10 @@ class BR_OT_import_photos(bpy.types.Operator, ImportHelper):
 
     def execute(self, context):
         import_preview.close_dialog(self)
-        paths = [catalog.resolved(self.directory) / item.name for item in self.files if item.name]
+        paths = []
+        if self.files:
+            directory = catalog.resolved(self.directory)
+            paths = [directory / item.name for item in self.files if item.name]
         if not paths and self.filepath:
             paths = [catalog.resolved(self.filepath)]
         if not paths:
@@ -46,11 +49,12 @@ class BR_OT_import_photos(bpy.types.Operator, ImportHelper):
             return {"CANCELLED"}
         added = existing = 0
         errors = []
+        path_index = catalog.photo_path_index(catalog.library(context).photos) if len(paths) > 1 else None
         for path in paths:
             try:
                 if path.suffix.lower().lstrip(".") not in RAW_SUFFIXES:
                     raise ValueError(f"Unrecognized RAW extension: {path.suffix}")
-                photo, new = catalog.add_photo(context, path, self.pack)
+                photo, new = catalog.add_photo(context, path, self.pack, path_index=path_index)
                 compositor.ensure_photo_scene(context, photo)
                 jobs.thumbnail_later(photo)
                 added += int(new)
