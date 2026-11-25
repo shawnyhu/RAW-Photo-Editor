@@ -11,7 +11,10 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ROOT_FILES = {"README.md", "CHANGELOG.md", "LICENSE", ".gitignore", ".gitattributes", "docs/workflow.md"}
+ROOT_FILES = {
+    "README.md", "CHANGELOG.md", "LICENSE", ".gitignore", ".gitattributes", "AGENTS.md",
+    "docs/workflow.md", "docs/development.md", "docs/development-log.md",
+}
 
 
 def inspect_file(name, data):

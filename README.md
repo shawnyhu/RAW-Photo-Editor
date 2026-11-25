@@ -6,6 +6,8 @@ Each photo has its own Blender scene and compositor stack. Keep the original RAW
 
 [Download the extension](https://github.com/shawnyhu/RAW-Photo-Editor/releases/latest) · [User guide](docs/workflow.md) · [Changelog](CHANGELOG.md)
 
+For development on a new machine, start with the [developer handoff / 开发交接](docs/development.md). The [development log / 开发日志](docs/development-log.md) explains past design decisions and the tests that cover them.
+
 ## Workflow
 
 - **Develop RAW files.** Set white balance and exposure, or load a camera profile. Work with smaller previews and export from the full-resolution original.
@@ -27,6 +29,6 @@ The matching `raw_photo_editor-source-*.zip` includes the Windows decoder wheel 
 blender -b --factory-startup --offline-mode --command extension build --source-dir blender_raw
 ```
 
-When building from a Git checkout without the Windows wheel, build it with the [decoder workflow](.github/workflows/prepare-decoder.yml) and place it in `blender_raw/wheels/`.
+The v1.0.1 Git checkout includes all four dependency wheels. To rebuild the Windows RAW decoder itself, use the [decoder workflow](.github/workflows/prepare-decoder.yml).
 
 Maintained by **ShawnHu**. [GPL-3.0-or-later](LICENSE) · [Third-party licenses and credits](blender_raw/vendor/THIRD_PARTY.md)
