@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2-beta.2 — 2026-11-26
+
+- Choose **Vertical**, **Horizontal**, or **Both** in Crop & Perspective. **Edit Guides** and **Auto Detect** use the selected direction. Existing crops open with their original four-guide correction.
+- Auto Detect checks for well-supported, separated lines and declines excessive corrections. An unsuccessful detection preserves the current crop and perspective.
+- Drag a single guide corner farther when correcting steep perspective. The crop fits inside the usable part of the source image. Guide handles keep their offset from the pointer during a drag.
+
 ## 1.0.2-beta.1 — 2026-11-25
 
 - Start a selected photo's RAW preview while Gallery thumbnails are being generated. One thumbnail worker can run alongside interactive development.

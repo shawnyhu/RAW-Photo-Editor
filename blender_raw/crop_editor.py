@@ -15,7 +15,7 @@ from . import crop_node, crop_geometry as geom, crop_detect
 _active = None
 
 
-def detection(image):
+def detection(image, direction='BOTH'):
     # Blender image copies need not preserve an unsaved buffer. Sample the actual input.
     w,h = image.size
     scale = min(1.,512/max(w,h))
@@ -24,7 +24,7 @@ def detection(image):
         small = image.copy()
         try:
             small.scale(sw,sh)
-            return detection(small)
+            return detection(small, direction)
         finally:
             bpy.data.images.remove(small)
     data = np.empty(w*h*image.channels,dtype=np.float32)
@@ -34,7 +34,7 @@ def detection(image):
     iy = np.minimum(h-1, ((np.arange(sh)+.5)*h/sh).astype(int))
     rgb = pixels[iy[:,None],ix]
     gray = rgb[:,:,:3] @ np.array((.2126,.7152,.0722),dtype=np.float32) if image.channels>=3 else rgb[:,:,0]
-    return crop_detect.detect(gray)
+    return crop_detect.detect(gray, direction)
 
 
 def draw_overlay():
@@ -56,7 +56,10 @@ def draw_overlay():
     if op.action=='GUIDES':
         quad = np.reshape(op.p['guides'],(4,2))
         for i in range(4):
-            line((quad[i],quad[(i+1)%4]),(.2,.85,1,1) if i%2 else (1,.68,.18,1),2)
+            direction = op.p.get('direction', 'BOTH')
+            enabled = direction=='BOTH' or direction==('VERTICAL' if i%2 else 'HORIZONTAL')
+            if enabled:
+                line((quad[i],quad[(i+1)%4]),(.2,.85,1,1) if i%2 else (1,.68,.18,1),2)
     else:
         m = op.frame.inverse
         quad = geom.project(m,geom.UNIT)
@@ -91,6 +94,11 @@ class BR_OT_edit_crop(bpy.types.Operator):
         if not self.node or self.node.bl_idname!=crop_node.TYPE or not tree.is_editable:
             return {'CANCELLED'}
         self.p = crop_node.parameters(self.node)
+        if self.action in {'GUIDES','AUTO'}:
+            # Direction selection prepares the next operation. Commit it only
+            # together with accepted guides, so cancel/weak detection is inert.
+            self.p['direction'] = self.node.edit_direction
+            self.p['bounded_guides'] = True
         if self.action=='FIT':
             self.p.update(size=1.,position=(.5,.5))
             crop_node.apply(self.node,context,self.p,self.node.reference_aspect)
@@ -107,10 +115,10 @@ class BR_OT_edit_crop(bpy.types.Operator):
             self.image = self.resources.enter_context(crop_node.reference(context.scene,self.node))
             self.aspect = self.image.size[0]/self.image.size[1]
             if self.action=='AUTO':
-                self.p.update(guides=detection(self.image),mode='AUTO')
+                self.p.update(guides=detection(self.image,self.p.get('direction','BOTH')),mode='AUTO')
                 crop_node.apply(self.node,context,self.p,self.aspect)
                 self.resources.close()
-                self.report({'INFO'},'Guides applied. Use Four Guides to refine them')
+                self.report({'INFO'},'Guides applied. Use Edit Guides to refine them')
                 return {'FINISHED'}
             areas = [a for a in context.screen.areas if a.type=='IMAGE_EDITOR']
             if areas:
@@ -125,13 +133,27 @@ class BR_OT_edit_crop(bpy.types.Operator):
             self.space = self.area.spaces.active
             self.previous = self.space.image
             self.space.image = self.image
+            # A different reference can be much larger than the developed
+            # preview. Fit it once; retain the user's view of the same image.
+            if self.previous!=self.image:
+                with context.temp_override(window=self.window,area=self.area,region=self.region):
+                    bpy.ops.image.view_all(fit_view=True)
             if self.action=='GUIDES':
                 self.p['mode'] = 'MANUAL'
-            self.frame = crop_node.solve(self.p,self.aspect)
+                try:
+                    self.frame = crop_node.solve(self.p,self.aspect)
+                except ValueError:
+                    self.p['guides'] = geom.GUIDES
+                    self.frame = crop_node.solve(self.p,self.aspect)
+            else:
+                self.frame = crop_node.solve(self.p,self.aspect)
             self.drag = None
             self.handle = bpy.types.SpaceImageEditor.draw_handler_add(draw_overlay,(),'WINDOW','POST_PIXEL')
             _active = self
-            self.area.header_text_set(('Align the two cyan verticals and two amber horizontals' if self.action=='GUIDES'
+            guidance = {'BOTH':'Align the cyan verticals and amber horizontals',
+                        'VERTICAL':'Align the two cyan vertical guides',
+                        'HORIZONTAL':'Align the two amber horizontal guides'}
+            self.area.header_text_set((guidance[self.p.get('direction','BOTH')] if self.action=='GUIDES'
                                        else 'Drag inside to move; drag a corner to resize; [ / ] to rotate')
                                       +'   |   Enter applies   Esc cancels')
             self.area.tag_redraw()
@@ -174,6 +196,8 @@ class BR_OT_edit_crop(bpy.types.Operator):
         index = int(np.argmin(distances))
         if distances[index] <= 16:
             self.drag = ('CORNER',index)
+            self.drag_offset = quad[index]-uv
+            self.drag_frame = f
         elif self.action=='CROP':
             work = geom.project(f.source_to_work,uv)[0]
             if np.all(work>=f.lower) and np.all(work<=f.lower+f.extent):
@@ -183,10 +207,13 @@ class BR_OT_edit_crop(bpy.types.Operator):
         f = self.frame
         p = self.p.copy()
         kind,arg = self.drag
+        if kind=='CORNER':
+            # Preserve where the handle was grabbed instead of snapping its
+            # center to the cursor on the first movement.
+            uv = uv+self.drag_offset
         if self.action=='GUIDES':
-            quad = np.reshape(p['guides'],(4,2)).copy()
-            quad[arg] = np.clip(uv,0,1)
-            p['guides'] = quad.ravel().tolist()
+            p['guides'] = geom.drag_guides(p['guides'],arg,uv,self.aspect,
+                                          axis=p.get('direction','BOTH'))
         else:
             work = geom.project(f.source_to_work,uv)[0]
             if kind=='MOVE':
@@ -228,12 +255,16 @@ class BR_OT_edit_crop(bpy.types.Operator):
                                                -math.pi, math.pi))
                 self.frame = crop_node.solve(self.p,self.aspect)
             elif event.type=='LEFTMOUSE' and event.value=='RELEASE':
-                self.drag = None
+                try:
+                    if self.drag is not None:
+                        uv,_ = self.mouse(event)
+                        self.move(uv)
+                finally:
+                    self.drag = None
             elif event.type in {'LEFTMOUSE','MOUSEMOVE'}:
                 uv,xy = self.mouse(event)
                 if event.type=='LEFTMOUSE' and event.value=='PRESS':
                     if np.all(xy>=0) and xy[0]<self.region.width and xy[1]<self.region.height:
-                        self.drag_frame = self.frame
                         self.start_drag(uv,xy)
                 elif self.drag is not None:
                     self.move(uv)

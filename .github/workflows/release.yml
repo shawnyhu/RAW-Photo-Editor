@@ -7,6 +7,12 @@ on:
     branches: [main]
     paths: ['blender_raw/blender_manifest.toml']
   workflow_dispatch:
+    inputs:
+      macos_runner:
+        description: Apple Silicon runner for this validation
+        type: choice
+        default: macos-15
+        options: [macos-15, macos-26]
 permissions:
   contents: read
 jobs:
@@ -14,7 +20,7 @@ jobs:
     uses: ./.github/workflows/prepare-decoder.yml
   install-and-test:
     needs: decoder
-    runs-on: macos-15
+    runs-on: ${{ inputs.macos_runner || 'macos-15' }}
     timeout-minutes: 20
     outputs:
       digest: ${{ steps.upload.outputs.artifact-digest }}
@@ -64,6 +70,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          "$BLENDER" -b --factory-startup --offline-mode --python-exit-code 1 --python tests/crop_detection_confidence.py
+          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/crop_axis_geometry.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/crop_perspective.py
       - name: Drag crop and perspective handles in a Blender window
         shell: bash
@@ -135,6 +143,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & $blender -b --factory-startup --offline-mode --python-exit-code 1 --python tests/native_source_binding.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $blender -b --factory-startup --offline-mode --python-exit-code 1 --python tests/crop_detection_confidence.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $blender -b --offline-mode --python-exit-code 1 --python tests/crop_axis_geometry.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/crop_perspective.py
           $testExitCode = $LASTEXITCODE
           if ($testExitCode -ne 0) {

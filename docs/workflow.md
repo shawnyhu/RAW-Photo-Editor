@@ -14,10 +14,11 @@ Add **Crop & Perspective** near the end of the effect stack to frame the finishe
 | --- | --- |
 | **Edit Crop Frame** | Drag a corner to resize or drag inside to move. Choose **Free**, **Original**, 1:1, 5:4, 4:3, 3:2, 16:9 or 2.39:1. The arrow beside the ratio swaps width and height. |
 | **Rotation** and **Fit** | Straighten the image and fit the largest frame of the selected ratio. In the crop editor, use `[` and `]` for 1° steps, or hold Shift for 0.1°. |
-| **Four Guides** | Drag the four corners on the input image. Align the cyan sides to edges that should be vertical and the amber sides to edges that should be horizontal. A window or door frame can serve as a reference for the whole image. |
-| **Auto Detect** | Fit two pairs of visible lines automatically. Use **Four Guides** to refine the result or when the scene lacks clear straight edges. |
+| **Vertical**, **Horizontal**, **Both** | Choose the direction for your next edit or detection. The status above the buttons shows the correction currently applied. |
+| **Edit Guides** | In **Vertical**, place the two cyan guides along upright edges, such as doorposts. In **Horizontal**, align the two amber guides with level edges, such as shelves. **Both** uses all four sides. Drag the endpoints on the original image. |
+| **Auto Detect** | Look for two distinct, well-supported lines in each requested direction. If the scene only has reliable uprights, select **Vertical**. When the evidence is weak or the proposed warp is extreme, the current adjustment stays in place. |
 
-Press **Enter** to apply or **Esc** to discard the current drag session. **Disable Perspective** keeps the crop controls available.
+Press **Enter** to apply or **Esc** to discard the current drag session. Each application replaces the node’s previous perspective correction. Choose **Both** to straighten both directions together. **Disable Perspective** keeps the crop controls available.
 
 ## Film and compositor effects
 

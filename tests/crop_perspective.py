@@ -72,10 +72,25 @@ def pixels(folder):
     with crop_node.reference(scene,node) as reference:
         assert reference==img
     geom=crop_node.parameters(node)
+    # Projects saved before directions were added use the original four-guide mapping.
+    guides=(.15,.14,.85,.18,.72,.86,.23,.79)
+    assert node.bounded_guides
+    legacy={**geom, 'mode':'MANUAL', 'guides':(.15,.70,.85,.15,.85,.85,.15,.85)}
+    del legacy['direction']
+    del legacy['bounded_guides']
+    crop_node.apply(node,bpy.context,legacy,width/height)
+    assert node.direction=='BOTH' and not node.bounded_guides
+    legacy_frame=crop_node.solve(crop_node.parameters(node),width/height)
+    # Sample coordinates recorded from v1.0.2-beta.1 for this strong but valid correction.
+    np.testing.assert_allclose(g.project(legacy_frame.inverse,g.UNIT),
+                               ((0,.63684656),(.12222577,0),(.12222577,1),(0,.88761533)),atol=1e-6)
     for name, changes in [('identity',{}),('portrait',dict(preset='WIDE',flip=True)),
                           ('turn',dict(preset='THREE_TWO',angle=.24)),
-                          ('guides',dict(mode='MANUAL',guides=(.15,.14,.85,.18,.72,.86,.23,.79))),
-                          ('reframe',dict(preset='FREE',free=.85,size=.65,position=(.34,.67)))]:
+                          ('guides',dict(mode='MANUAL',guides=guides)),
+                          ('steep',dict(mode='MANUAL',guides=(.15,.78,.85,.15,.85,.85,.15,.85))),
+                          ('reframe',dict(preset='FREE',free=.85,size=.65,position=(.34,.67))),
+                          ('vertical',dict(mode='MANUAL',guides=guides,direction='VERTICAL')),
+                          ('horizontal',dict(mode='AUTO',guides=guides,direction='HORIZONTAL'))]:
         p={**geom,**changes}
         crop_node.apply(node,bpy.context,p,width/height)
         out=folder/(name+'.exr')
@@ -94,13 +109,17 @@ def pixels(folder):
     effect_copy=native_effects.duplicate_effect(scene,effect)
     duplicate=native_effects.effect_node(effect_copy)
     assert duplicate.node_tree!=node.node_tree
+    assert node.direction==duplicate.direction=='HORIZONTAL'
     duplicate.angle=.5
     assert node.angle!=duplicate.angle
     blend=str(folder/'crop.blend')
     bpy.ops.wm.save_as_mainfile(filepath=blend)
     bpy.ops.wm.open_mainfile(filepath=blend)
     saved=[native_effects.effect_node(e) for e in bpy.context.scene.compositor_effects]
-    assert sum(bool(n and n.bl_idname==crop_node.TYPE and n.node_tree) for n in saved)==2
+    crops=[n for n in saved if n and n.bl_idname==crop_node.TYPE and n.node_tree]
+    assert len(crops)==2 and all(n.direction=='HORIZONTAL' for n in crops)
+    crop_node.reset(crops[0],bpy.context)
+    assert crops[0].mode=='OFF' and crops[0].edit_direction==crops[0].direction=='BOTH'
 
 
 def gallery(folder):

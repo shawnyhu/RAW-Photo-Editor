@@ -11,6 +11,11 @@ from bpy.props import BoolProperty, EnumProperty, FloatProperty, FloatVectorProp
 from . import crop_geometry as geom
 
 TYPE = 'BlenderRawCropPerspective'
+DIRECTIONS = (
+    ('VERTICAL', 'Vertical', 'Straighten two upright lines, such as building edges'),
+    ('HORIZONTAL', 'Horizontal', 'Level two lines, such as the top and bottom of a facade'),
+    ('BOTH', 'Both', 'Straighten both pairs of lines together'),
+)
 _busy = False
 
 
@@ -85,12 +90,16 @@ def make_tree():
 
 def parameters(node):
     return dict(preset=node.preset, flip=node.flip, free=node.free_ratio, size=node.crop_size,
-                position=tuple(node.center), angle=node.angle, mode=node.mode, guides=tuple(node.guides))
+                position=tuple(node.center), angle=node.angle, mode=node.mode, guides=tuple(node.guides),
+                direction=node.direction, bounded_guides=node.bounded_guides)
 
 
 def solve(p, aspect):
+    active = p['mode'] != 'OFF'
     return geom.frame(aspect, geom.ratio_for(p['preset'], aspect, p['free'], p['flip']),
-                      geom.UNIT if p['mode']=='OFF' else p['guides'], p['angle'], p['size'], p['position'])
+                      p['guides'] if active else geom.UNIT, p['angle'], p['size'], p['position'],
+                      axis=p.get('direction', 'BOTH') if active else 'BOTH',
+                      legacy_bounds=active and not p.get('bounded_guides', False))
 
 
 def sync(node, aspect):
@@ -176,7 +185,8 @@ def apply(node, context, p, aspect):
         node.reference_aspect = aspect
         node.preset, node.flip, node.free_ratio = p['preset'], p['flip'], p['free']
         node.crop_size, node.center, node.angle = p['size'], p['position'], p['angle']
-        node.guides, node.mode = p['guides'], p['mode']
+        node.guides, node.mode, node.direction = p['guides'], p['mode'], p.get('direction', 'BOTH')
+        node.bounded_guides = p.get('bounded_guides', False)
     finally:
         _busy = False
     edited(node, context)
@@ -184,7 +194,8 @@ def apply(node, context, p, aspect):
 
 def reset(node, context):
     apply(node,context,dict(preset='FREE', flip=False, free=0., size=1., position=(.5,.5),
-                           angle=0., mode='OFF', guides=geom.GUIDES),node.reference_aspect)
+                           angle=0., mode='OFF', guides=geom.GUIDES, bounded_guides=True),node.reference_aspect)
+    node.edit_direction = 'BOTH'
 
 
 @contextmanager
@@ -222,8 +233,14 @@ class BR_NODE_crop(bpy.types.CompositorNodeCustomGroup):
     crop_size: FloatProperty(name='Crop Size', default=1., min=.01,max=1.,subtype='FACTOR',update=edited)
     center: FloatVectorProperty(name='Crop Center',size=2,default=(.5,.5),min=0.,max=1.,update=edited)
     angle: FloatProperty(name='Rotation',subtype='ANGLE',unit='ROTATION',min=-math.pi,max=math.pi,update=edited)
-    mode: EnumProperty(name='Perspective',items=[('OFF','Off',''),('MANUAL','Manual','Four corner guides'),
-                                                ('AUTO','Auto','Detected horizontal and vertical guides')],update=edited)
+    mode: EnumProperty(name='Perspective',items=[('OFF','Off',''),('MANUAL','Manual','Align guides by hand'),
+                                                ('AUTO','Auto','Use detected guides')],update=edited)
+    direction: EnumProperty(name='Applied Direction', items=DIRECTIONS, default='BOTH',
+                            options={'HIDDEN'}, update=edited)
+    edit_direction: EnumProperty(name='Guide Direction', items=DIRECTIONS, default='BOTH',
+                                 description='Choose the lines to use for Edit Guides or Auto Detect')
+    # Missing on saved nodes from beta.1 and earlier. Keep their exact crop until guides are reapplied.
+    bounded_guides: BoolProperty(default=False, options={'HIDDEN'})
     guides: FloatVectorProperty(size=8,default=geom.GUIDES,options={'HIDDEN'},update=edited)
     reference_aspect: FloatProperty(default=1.5,min=.0001,options={'HIDDEN'})
 
@@ -232,6 +249,7 @@ class BR_NODE_crop(bpy.types.CompositorNodeCustomGroup):
         return tree.bl_idname=='CompositorNodeTree'
 
     def init(self, context):
+        self.bounded_guides = True
         self.node_tree = make_tree()
         scene = getattr(context,'scene',None)
         if scene:
@@ -255,9 +273,15 @@ class BR_NODE_crop(bpy.types.CompositorNodeCustomGroup):
         button(row,'FIT','Fit')
         button(layout,'CROP','Edit Crop Frame')
         layout.separator()
-        layout.label(text='Perspective · '+{'OFF':'Off','AUTO':'Auto','MANUAL':'Manual'}[self.mode])
+        status = self.mode.title()
+        if self.mode != 'OFF':
+            status += ' · ' + self.direction.title()
+        layout.label(text='Perspective · ' + status)
         row = layout.row(align=True)
-        button(row,'GUIDES','Four Guides')
+        row.use_property_split = False
+        row.prop(self, 'edit_direction', expand=True)
+        row = layout.row(align=True)
+        button(row,'GUIDES','Edit Guides')
         button(row,'AUTO','Auto Detect')
         if self.mode!='OFF':
             button(layout,'OFF','Disable Perspective')

@@ -46,12 +46,17 @@ def run():
         return dict(x=x+canvas.x,y=y+canvas.y)
     def event(kind,value,pt):
         window.event_simulate(type=kind,value=value,**location(pt))
-    def drag(start,end):
+    def offset_uv(uv,dx,dy):
+        x,y=canvas.view2d.view_to_region(*uv,clip=False)
+        return np.array(canvas.view2d.region_to_view(x+dx,y+dy))
+    def drag(start,end,release_only=False):
         event('MOUSEMOVE','NOTHING',start)
         event('LEFTMOUSE','PRESS',start)
         yield
-        event('MOUSEMOVE','NOTHING',end)
-        yield
+        assert crop_editor._active.drag is not None,'Visible handle did not accept the press'
+        if not release_only:
+            event('MOUSEMOVE','NOTHING',end)
+            yield
         event('LEFTMOUSE','RELEASE',end)
         yield
     def finish(key):
@@ -64,19 +69,97 @@ def run():
     assert invoke('GUIDES')=={'RUNNING_MODAL'}
     yield
     assert area.spaces.active.image==image
-    with bpy.context.temp_override(window=window,area=area,region=canvas):
-        bpy.ops.image.view_all(fit_view=True)
+    for pt in np.reshape(crop_editor._active.p['guides'],(4,2)):
+        x,y=canvas.view2d.view_to_region(*pt,clip=False)
+        assert 0<x<canvas.width and 0<y<canvas.height,'Guide was outside the fitted reference'
+    # Reproduce the lower-left handle moving straight upward. The other three
+    # corners stay put and the node is changed only when the editor is accepted.
+    untouched=tuple(node.guides)
+    yield from drag((.15,.15),(.15,.78))
+    np.testing.assert_allclose(crop_editor._active.p['guides'][:2],(.15,.78),atol=.012)
+    np.testing.assert_allclose(crop_editor._active.p['guides'][2:],untouched[2:],atol=1e-7)
+    assert tuple(node.guides)==untouched
+    yield from finish('RET')
+    np.testing.assert_allclose(node.guides[:2],(.15,.78),atol=.012)
+    crop_node.reset(node,bpy.context)
+    assert invoke('GUIDES')=={'RUNNING_MODAL'}
     yield
-    yield from drag((.15,.15),(.25,.20))
+    yield from drag((.85,.85),(.40,.72))
+    yield from finish('RET')
+    np.testing.assert_allclose(node.guides[4:6],(.40,.72),atol=.012)
+    crop_node.reset(node,bpy.context)
+    assert invoke('GUIDES')=={'RUNNING_MODAL'}
+    yield
+    yield from drag((.15,.15),(.15,.33))
+    # Grabbing the edge of the handle must keep that grab offset. A release at
+    # a new position must also apply even when no final MOUSEMOVE was delivered.
+    start=offset_uv((.15,.33),9,7)
+    yield from drag(start,start+(.04,.035),release_only=True)
     yield from finish('RET')
     assert node.mode=='MANUAL'
-    np.testing.assert_allclose(node.guides[:2],(.25,.20),atol=.012)
+    np.testing.assert_allclose(node.guides[:2],(.19,.365),atol=.012)
     old=tuple(node.guides)
     assert invoke('GUIDES')=={'RUNNING_MODAL'}
     yield
-    yield from drag((.25,.20),(.34,.26))
+    yield from drag(old[:2],(.30,.39))
     yield from finish('ESC')
     assert tuple(node.guides)==old
+
+    # Direction selection is pending until an operation succeeds. Blank-image
+    # detection and manual cancellation preserve all previously committed data.
+    node.bounded_guides=False  # Simulate a saved legacy perspective result.
+    before=crop_node.parameters(node)
+    node.edit_direction='VERTICAL'
+    assert invoke('AUTO')=={'CANCELLED'}
+    assert crop_node.parameters(node)==before
+    assert area.spaces.active.image==previous and crop_editor._active is None
+    assert invoke('GUIDES')=={'RUNNING_MODAL'}
+    yield
+    assert crop_editor._active.p['direction']=='VERTICAL'
+    yield from drag(old[:2],(.23,.40))
+    yield from finish('ESC')
+    assert crop_node.parameters(node)==before
+    assert invoke('GUIDES')=={'RUNNING_MODAL'}
+    yield
+    yield from finish('RET')
+    assert node.direction=='VERTICAL' and node.bounded_guides
+
+    node.edit_direction='HORIZONTAL'
+    assert invoke('GUIDES')=={'RUNNING_MODAL'}
+    yield
+    assert crop_editor._active.p['direction']=='HORIZONTAL'
+    start=np.array(crop_editor._active.p['guides'][:2])
+    yield from drag(start,start+(0,.04))
+    yield from finish('RET')
+    assert node.direction=='HORIZONTAL'
+    node.edit_direction='BOTH'
+    assert invoke('GUIDES')=={'RUNNING_MODAL'}
+    yield
+    yield from finish('RET')
+    assert node.direction=='BOTH'
+
+    # A photograph with only one usable line family can be corrected on that
+    # axis. The same input must not silently downgrade a requested Both solve.
+    def line_chart(direction):
+        w,h=image.size
+        y,x=np.indices((h,w),dtype=np.float32)
+        x,y=(x+.5)/w,(y+.5)/h
+        across,along=(x,y) if direction=='VERTICAL' else (y,x)
+        gray=(.08+.7*np.exp(-((across-(.23+.10*along))/.008)**2)
+              +.7*np.exp(-((across-(.81-.07*along))/.008)**2))
+        rgba=np.stack((gray,gray,gray,np.ones_like(gray)),axis=-1)
+        image.pixels.foreach_set(rgba.ravel())
+        image.update()
+    line_chart('VERTICAL')
+    before=crop_node.parameters(node)
+    assert invoke('AUTO')=={'CANCELLED'}
+    assert crop_node.parameters(node)==before
+    for direction in ('VERTICAL','HORIZONTAL'):
+        line_chart(direction)
+        node.edit_direction=direction
+        assert invoke('AUTO')=={'FINISHED'}
+        assert node.mode=='AUTO' and node.direction==direction
+        assert area.spaces.active.image==previous and crop_editor._active is None
 
     assert invoke('OFF')=={'FINISHED'}
     node.preset='SQUARE'
@@ -95,7 +178,7 @@ def run():
     assert abs(node.angle-np.radians(1))<1e-5
     assert tuple(node.center)!=(.5,.5)
     assert invoke('FIT')=={'FINISHED'} and abs(node.crop_size-1)<1e-6
-    print('PASS four guide handles, commit/cancel, resize/move frame, keyboard rotation, fit and editor restoration',flush=True)
+    print('PASS upward lower-left drag, grab offset, release position, independent guide directions, weak detection preservation, commit/cancel, resize/move frame, keyboard rotation, fit and editor restoration',flush=True)
 
 
 steps=run()
