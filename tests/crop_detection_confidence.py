@@ -83,4 +83,9 @@ rejected(extreme, 'VERTICAL', 'stretch or discard')
 rejected(extreme, 'BOTH', 'no safe vertical correction')
 rejected(extreme.T, 'HORIZONTAL', 'stretch or discard')
 rejected(extreme.T, 'BOTH', 'no safe horizontal correction')
+
+# The measured segments are distinct, but their vanishing point is inside
+# the unmeasured upper part of this portrait. Clipping the workspace hides it.
+crossing = chart([((.18, .02), (.37, .55)), ((.82, .02), (.63, .55))], shape=(384, 160))
+rejected(crossing, 'VERTICAL', 'stretch or discard')
 print('PASS automatic perspective: independent axes, confidence rejection, neutral aligned frame and conservative crop')

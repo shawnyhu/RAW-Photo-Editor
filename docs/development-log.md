@@ -62,3 +62,5 @@
 **Vertical** 取左右两条参考线，**Horizontal** 取上下两条，**Both** 按四边求透视。节点分别存储下次操作选取的方向和已经生效的方向，点击方向按钮、取消或检测失败均保留现有结果。旧节点缺少 `bounded_guides` 属性时沿用原有的采样边界，重新应用透视后才切换。用 beta.1 保存了一个大幅透视的真实 `.blend` 测试文件，beta.2 重开后四个角的反向采样坐标完全一致。[节点参数](../blender_raw/crop_node.py) · [像素、复制及保存回归](../tests/crop_perspective.py)
 
 在 3:2 图像上用默认参考框固定三个角，只把左下角从图高 15% 向上拖。旧版到 74% 时，虽然四边形仍为凸形，整幅照片的投影已跨过消失线，编辑器丢弃了鼠标移动。新版只对可采样的区域拟合裁切；接近四点交叉时，拖动止于有效边界。独立配置安装后，通过 Blender 窗口事件把同一个角直接拖到 78% 并确认，另测了偏离手柄中心抓取、取消、横纵单轴和弱线条提示。导出的 EXR 检查了实际像素坐标、HDR 和 Alpha。[几何实现](../blender_raw/crop_geometry.py) · [几何回归](../tests/crop_axis_geometry.py) · [窗口测试](../tests/crop_perspective_ui.py)
+
+公开测试包对应提交 [88bd66b](https://github.com/shawnyhu/RAW-Photo-Editor/commit/88bd66bea6359bfeac936df6ea4319598fbc787b)。Apple Silicon 在 Blender 5.3.0 完成离线安装、窗口拖角、透视几何、导出像素和批量导出回归，Windows x64 安装了同一个 ZIP 并通过几何与导出测试。分支另补了一张纵幅合成图，专门覆盖消失线穿过画面上部的情况，已在 Windows Blender 5.3.0 通过。[跨平台验证记录](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45735328785)
