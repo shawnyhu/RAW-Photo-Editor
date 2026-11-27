@@ -64,3 +64,11 @@
 在 3:2 图像上用默认参考框固定三个角，只把左下角从图高 15% 向上拖。旧版到 74% 时，虽然四边形仍为凸形，整幅照片的投影已跨过消失线，编辑器丢弃了鼠标移动。新版只对可采样的区域拟合裁切；接近四点交叉时，拖动止于有效边界。独立配置安装后，通过 Blender 窗口事件把同一个角直接拖到 78% 并确认，另测了偏离手柄中心抓取、取消、横纵单轴和弱线条提示。导出的 EXR 检查了实际像素坐标、HDR 和 Alpha。[几何实现](../blender_raw/crop_geometry.py) · [几何回归](../tests/crop_axis_geometry.py) · [窗口测试](../tests/crop_perspective_ui.py)
 
 公开测试包对应提交 [88bd66b](https://github.com/shawnyhu/RAW-Photo-Editor/commit/88bd66bea6359bfeac936df6ea4319598fbc787b)。Apple Silicon 在 Blender 5.3.0 完成离线安装、窗口拖角、透视几何、导出像素和批量导出回归，Windows x64 安装了同一个 ZIP 并通过几何与导出测试。分支另补了一张纵幅合成图，专门覆盖消失线穿过画面上部的情况，已在 Windows Blender 5.3.0 通过。[跨平台验证记录](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45735328785)
+
+## 2026-11-27 · 调色效果卡片、Developer 测光和查看器背景（1.0.2-beta.3）
+
+照片工作区的 **Add Scene Effect** 保留 Blender 资产目录和搜索，在目录前提供 **Adjust** 子菜单。九种卡片各自持有原生节点，在 Settings 里直接编辑；复制卡片或跨照片粘贴会得到独立参数和曲线。Gamma 在 Blender 5.3 中的节点类型是 `ShaderNodeGamma`，图像端口名为 `Color`，其余八种使用 `Image`。裁切后的输出尺寸沿同一条图像连接向前查找，因此在裁切后继续调色也能导出正确画幅。Spektrafilm Lite 和 OFX 单列一组，自定义节点组使用 **Custom Compositor**。[卡片映射](../blender_raw/adjust_effects.py) · [效果卡片回归](../tests/adjust_effect_cards.py) · [裁切后调色导出](../tests/crop_perspective.py)
+
+Raw Developer 按 **Camera & Look**、**White Balance**、**Auto Exposure** 分组。**As Shot** 与 **Meter** 共用旧的 `auto_exposure` 值；取消 As Shot 会选择 Spot。保留所有已保存模式的枚举编号，包括两种早期胶片测光。原生效果卡片仍然使用同一个 Exposure 输入和动画路径。旧工程加载时只调整这个输入的界面可见性。测试覆盖普通节点和效果卡片、两个曝光关键帧、复制、保存重开及旧模式。[测光模式](../blender_raw/metering.py) · [Developer 回归](../tests/developer_meter_controls.py)
+
+查看器的底色由 Photo Workspace 保存。Image Editor 按实际缩放和平移坐标填充照片外的区域，三档颜色分别为黑、深灰和浅灰。回归从真实窗口读取颜色，对比图内半透明像素、相邻图库、全局主题及导出 PNG，并检查工作区设置能随工程保存。[绘制逻辑](../blender_raw/viewer_background.py) · [窗口测试](../tests/viewer_background_ui.py)

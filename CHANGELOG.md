@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2-beta.3 — 2026-11-27
+
+- In the photo editor, **Add Scene Effect → Adjust** contains nine native color adjustment cards. Spektrafilm Lite and OFX have their own section. Use **Custom Compositor** for an editable node group.
+- **Raw Developer** groups its controls under **Camera & Look**, **White Balance** and **Auto Exposure**. Exposure compensation is the first control in Auto Exposure. Turn off **As Shot** to start in **Spot** metering mode. Existing exposure values and keyframes keep their original socket.
+- In the photo viewer sidebar, open **Editor → Canvas Background** to choose black, dark gray or light gray. The workspace saves the selected color. Black is the default.
+
 ## 1.0.2-beta.2 — 2026-11-26
 
 - Choose **Vertical**, **Horizontal**, or **Both** in Crop & Perspective. **Edit Guides** and **Auto Detect** use the selected direction. Existing crops open with their original four-guide correction.

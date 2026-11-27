@@ -55,17 +55,14 @@ def run():
     rows = {}
     draw_controls = meter_ui.draw_controls
 
-    def record_controls(layout, owner, src):
-        draw_controls(layout, owner, src)
+    def record_controls(layout, owner, src, **kwargs):
+        draw_controls(layout, owner, src, **kwargs)
         if owner == node:
             # Introspect the real RNA layout on the node and in the Node sidebar.
             column = layout.introspect()[0]['items'][-1]
             controls = column.get('items', [])
-            if len(controls) >= 2:
-                meter, text = controls[:2]
-                meter_fields = meter.get('items', [meter])
-                if any(item.get('rna', '').endswith('.meter_mode[0]') for item in meter_fields):
-                    rows[bpy.context.region.type] = text.get('draw_string')
+            texts = [item.get('draw_string') for item in controls]
+            rows[bpy.context.region.type] = next((text for text in texts if text and 'Auto exposure:' in text), None)
 
     meter_ui.draw_controls = record_controls
     tree.nodes.active = node
@@ -79,7 +76,7 @@ def run():
         rows.clear()
         editor.tag_redraw()
         until = time.monotonic() + 8
-        while not all(rows.get(kind) == expected for kind in ('WINDOW', 'UI')):
+        while not all(kind in rows and rows[kind] == expected for kind in ('WINDOW', 'UI')):
             assert time.monotonic() < until, (expected, rows)
             yield
 
@@ -110,13 +107,13 @@ def run():
     assert rows == dict.fromkeys(('WINDOW', 'UI'), 'Auto exposure: awaiting image'), rows
     while addon.jobs.developing(photo.uid):
         yield
-    node.meter_mode = 'AS_SHOT'
+    node.as_shot = True
     assert readout() == 'auto exposure off'
-    yield from verify_draw('auto exposure off')
+    yield from verify_draw(None)
     node.auto_exposure = 'FILM_MEDIAN'
     assert node.meter_mode == 'FILM_MEDIAN'
     node.meter_mode = 'SPOT'
-    assert node.auto_exposure == 'SPOT' and len(metering.mode_items(node, None)) == 6
+    assert node.auto_exposure == 'SPOT' and len(metering.mode_items(node, None)) == 5
     node.spot_radius = 5
     with bpy.context.temp_override(window=window, area=viewer, region=region(viewer)):
         bpy.ops.image.view_zoom_ratio(ratio=2)

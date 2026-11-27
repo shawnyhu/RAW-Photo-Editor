@@ -124,7 +124,7 @@ def sync(node, aspect):
 
 
 def terminal_dimensions(scene, width, height, mode):
-    from . import scene_pipeline
+    from . import adjust_effects, compositor, film_node, scene_pipeline
     effects = scene_pipeline.effects(scene, mode)
     if not effects:
         return width, height
@@ -132,36 +132,34 @@ def terminal_dimensions(scene, width, height, mode):
     out = scene_pipeline.output_socket(effect.node_group)
     if out is None:
         return width, height
-    _, socket, _ = scene_pipeline.source_socket(scene, out, effect=effect, mode=mode)
-    if socket is None:
-        return width, height
-    from . import compositor, film_node
-    same_size = {*film_node.FILM_TYPES, compositor.DEVELOPER_TYPE, 'CompositorNodeExposure',
-                 'CompositorNodeGamma', 'CompositorNodeHueSat', 'CompositorNodeBrightContrast'}
-    def before_crop(current):
-        visited = set()
-        while current and current.bl_idname in same_size:
-            if current.as_pointer() in visited:
-                return None
-            visited.add(current.as_pointer())
-            current = scene_pipeline.immediate_image_source(scene,current,mode=mode)
-        return current
-    node = before_crop(socket.node)
-    if not node or node.bl_idname!=TYPE:
-        return width,height
-    # Resolve consecutive final crops and literal Image inputs at their actual resolution.
-    def source_size(current, seen):
-        previous = before_crop(scene_pipeline.immediate_image_source(scene, current, mode=mode))
-        if previous and previous.bl_idname=='CompositorNodeImage' and previous.image and all(previous.image.size):
-            return tuple(previous.image.size)
-        if previous and previous.bl_idname==TYPE and previous.as_pointer() not in seen:
-            return measure(previous, seen | {previous.as_pointer()})
-        return width, height
-    def measure(current, seen):
-        w,h = source_size(current, seen)
-        f = sync(current, w/h)
-        return tuple(max(1, math.floor(v+.5)) for v in np.array((w,h))*f.fractions)
-    return measure(node,{node.as_pointer()})
+    # Follow the image through color adjustments. Keep the effect and group path
+    # so two instances of the same custom group resolve their own inputs.
+    same_size = {*adjust_effects.NODES, *film_node.FILM_TYPES, compositor.DEVELOPER_TYPE,
+                 'CompositorNodeGamma'}
+    crops = []
+    visited = set()
+    parents = ()
+    while out is not None:
+        effect, socket, parents = scene_pipeline.source_socket(scene, out, effect=effect, parents=parents, mode=mode)
+        if socket is None:
+            break
+        node = socket.node
+        kind = node.bl_idname
+        key = (effect.as_pointer(), node.as_pointer(), tuple(group.as_pointer() for group in parents))
+        if key in visited:
+            break
+        visited.add(key)
+        if kind == TYPE:
+            crops.append(node)
+        elif kind not in same_size:
+            if crops and kind == 'CompositorNodeImage' and node.image and all(node.image.size):
+                width, height = node.image.size
+            break
+        out = adjust_effects.image_socket(node.inputs, kind) if kind in adjust_effects.NODES else node.inputs.get('Image')
+    for crop in reversed(crops):
+        fitted = sync(crop, width / height)
+        width, height = (max(1, math.floor(v + .5)) for v in np.array((width, height)) * fitted.fractions)
+    return width, height
 
 
 def edited(node, context):

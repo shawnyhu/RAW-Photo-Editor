@@ -918,18 +918,23 @@ def applied_white_balance(node):
 def draw_develop(layout, node, photo):
     from . import compositor
     col = layout.column()
+    col.enabled = bool(photo)
+    col.label(text="Camera & Look")
     draw_camera_input(col, node)
+    col.separator()
+    col.label(text="White Balance")
     wb = 'apple_white_balance' if uses_apple_input(node) else 'white_balance'
     row = col.row(align=True)
-    row.prop(node, wb, text="WB")
-    compositor._pick_button(row, photo, node, '')
+    row.prop(node, wb, text="White Balance")
+    if photo:
+        compositor._pick_button(row, photo, node, '')
     if getattr(node, wb) == "CUSTOM":
         col.prop(node, "temperature", text='Temperature (K)')
         col.prop(node, "tint")
     else:
         fields = col.column()
         fields.enabled = False
-        if applied_white_balance(node):
+        if photo and applied_white_balance(node):
             fields.prop(node, 'applied_temperature', text='Temperature (K)')
             fields.prop(node, 'applied_tint', text='Tint')
         else:

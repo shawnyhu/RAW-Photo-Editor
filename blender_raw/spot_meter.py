@@ -14,9 +14,32 @@ _picker = None
 _circle = tuple((math.cos(math.tau*i/80), math.sin(math.tau*i/80)) for i in range(81))
 
 
-def draw_controls(layout, node, photo):
+def draw_controls(layout, node, photo, *, effect=None):
+    from . import native_effects
+    layout.label(text="Auto Exposure")
+    socket = node.inputs.get('Exposure')
+    if not effect and node.id_data.get(native_effects.KIND_TAG):
+        owner = native_effects.owner_effect(node)
+        if owner and native_effects.effect_node(owner[1]) == node:
+            effect = owner[1]
+    prop = native_effects.input_property(effect, 'Exposure') if effect else None
+    row = layout.row()
+    row.use_property_decorate = True
+    if prop:
+        # Keep the exact native animation/driver path used by the original card.
+        row.prop(prop, 'value', text='Exposure')
+    elif socket and not socket.is_linked:
+        row.prop(socket, 'default_value', text='Exposure')
+    elif socket:
+        row.label(text='Exposure (linked)', icon='LINKED')
+    else:
+        row.prop(node, 'exposure')
+
     column = layout.column(align=True)
     column.enabled = bool(photo)
+    column.prop(node, 'as_shot')
+    if node.as_shot:
+        return
     column.prop(node, 'meter_mode')
     column.label(text=_exposure_readout(node, photo))
     if node.auto_exposure == 'SPOT':

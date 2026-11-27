@@ -58,6 +58,7 @@ def _create_pipeline():
     source = _add_input_stage(tree)
     ev = tree.interface.new_socket(name="Exposure", in_out="INPUT", socket_type="NodeSocketFloat")
     ev.default_value, ev.min_value, ev.max_value = 0.0, -12.0, 12.0
+    ev.hide_value = True  # Keep the link socket; its value is drawn in Auto Exposure.
     meter = _make_node(tree, "ShaderNodeMath", "Meter Offset", 0, -140)
     meter.operation = 'ADD'
     meter.inputs[1].default_value = 0.0
@@ -608,6 +609,9 @@ class BR_NODE_raw_develop(bpy.types.CompositorNodeCustomGroup):
     error: StringProperty(options={"SKIP_SAVE"})
     auto_exposure: EnumProperty(name="Auto Exposure", items=metering.STORED_MODES, default='AS_SHOT',
                                 options={'HIDDEN', 'ANIMATABLE'}, update=_update_grade)
+    as_shot: BoolProperty(name="As Shot", description="Use the recorded exposure with manual compensation",
+                          get=lambda node: node.auto_exposure == 'AS_SHOT', set=metering.set_as_shot,
+                          options={'SKIP_SAVE'})
     meter_mode: EnumProperty(name="Meter", items=metering.mode_items, get=metering.get_mode, set=metering.set_mode,
                              options={'SKIP_SAVE'})
     spot_center: FloatVectorProperty(name="Spot Center", description="Meter center in normalized image coordinates, from the top left",
@@ -671,15 +675,16 @@ class BR_NODE_raw_develop(bpy.types.CompositorNodeCustomGroup):
         self["refresh_input"] = True
         _queue_source_sync(self.id_data)
 
-    def draw_controls(self, layout, *, show_source=False):
+    def draw_controls(self, layout, *, show_source=False, effect=None):
         photo = developer_source(self) or developer_source(self, mode='RENDER')
-        if photo:
-            if show_source:
+        if show_source:
+            if photo:
                 layout.label(text=photo.name, icon="IMAGE_DATA")
-            catalog.draw_develop(layout, self, photo)
-        elif show_source:
-            layout.label(text="Connect a Raw Reader for camera settings", icon="INFO")
-        spot_meter.draw_controls(layout, self, photo)
+            else:
+                layout.label(text="Connect a Raw Reader for camera settings", icon="INFO")
+        catalog.draw_develop(layout, self, photo)
+        layout.separator()
+        spot_meter.draw_controls(layout, self, photo, effect=effect)
 
     def draw_buttons(self, context, layout):
         self.draw_controls(layout)
@@ -1275,6 +1280,25 @@ _held_for_save = []
 
 
 @persistent
+def _migrate_exposure_controls(*_args):
+    """Move saved input controls into the Developer sections, retaining their RNA paths."""
+    from . import native_effects
+    for tree in bpy.data.node_groups:
+        if tree.bl_idname != 'CompositorNodeTree' or not tree.is_editable:
+            continue
+        if tree.get(native_effects.KIND_TAG) == DEVELOPER_TYPE:
+            socket = tree.interface.items_tree.get('Exposure')
+            if socket and socket.item_type == 'SOCKET' and socket.in_out == 'INPUT' and not socket.hide_in_modifier:
+                socket.hide_in_modifier = True
+        for node in tree.nodes:
+            if node.bl_idname != DEVELOPER_TYPE or not node.node_tree or not node.node_tree.is_editable:
+                continue
+            socket = node.node_tree.interface.items_tree.get('Exposure')
+            if socket and socket.item_type == 'SOCKET' and socket.in_out == 'INPUT' and not socket.hide_value:
+                socket.hide_value = True
+
+
+@persistent
 def _retain_legacy_groups(_filepath):
     # Earlier clipboard copies could reduce a still-attached group's users to zero.
     # Blender omits such IDs when saving a project or a preview-worker snapshot.
@@ -1315,9 +1339,18 @@ def register():
     bpy.app.handlers.save_post.append(_release_legacy_groups)
     bpy.app.handlers.save_post_fail.append(_release_legacy_groups)
     bpy.app.handlers.load_pre.append(_clear_viewer_switches)
+    bpy.app.handlers.load_post.append(_migrate_exposure_controls)
+    bpy.app.handlers.blend_import_post.append(_migrate_exposure_controls)
+    # Extension enable can run against a file that is already open, inside RestrictBlend.
+    if not bpy.app.background:
+        bpy.app.timers.register(_migrate_exposure_controls)
 
 
 def unregister():
+    if bpy.app.timers.is_registered(_migrate_exposure_controls):
+        bpy.app.timers.unregister(_migrate_exposure_controls)
+    bpy.app.handlers.blend_import_post.remove(_migrate_exposure_controls)
+    bpy.app.handlers.load_post.remove(_migrate_exposure_controls)
     bpy.app.handlers.save_pre.remove(_retain_legacy_groups)
     bpy.app.handlers.save_post.remove(_release_legacy_groups)
     bpy.app.handlers.save_post_fail.remove(_release_legacy_groups)

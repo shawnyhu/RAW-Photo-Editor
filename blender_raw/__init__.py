@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import bpy
 
-from . import crop_editor
+from . import crop_editor, viewer_background
 from . import catalog, compositor, film_preview, filters, gallery, jobs, native_effects, node_recovery, node_status, operators
 
 
@@ -19,12 +19,14 @@ def register():
     jobs.register()
     film_preview.register()
     filters.register()
+    viewer_background.register()
 
 
 def unregister():
     # Clear native instanced-panel animations before any other module removes
     # a Panel class (Blender's RNA unregistration frees native instances too).
     native_effects.unregister()
+    viewer_background.unregister()
     filters.unregister()
     film_preview.unregister()
     jobs.unregister()

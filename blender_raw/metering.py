@@ -9,19 +9,18 @@ import tempfile
 import numpy as np
 
 
-_PHOTO_MODES = (
-    ('AS_SHOT', 'As Shot', 'Keep the original exposure'),
-    ('GLOBAL', 'Global', 'Meter the whole frame for middle gray'),
-    ('CENTER', 'Center-Weighted', 'Give the center of the frame more weight'),
-    ('HIGHLIGHTS', 'Preserve Highlights', 'Limit exposure to retain bright color detail'),
-    ('SHADOWS', 'Preserve Shadows', 'Raise exposure when the darker tones need more light'),
+# These numbers are stored in .blend files and in existing animation curves.
+MODES = (
+    ('SPOT', 'Spot', 'Meter a circular area of the developed image for 18% gray', 7),
+    ('GLOBAL', 'Global', 'Meter the whole frame for middle gray', 1),
+    ('CENTER', 'Center-Weighted', 'Give the center of the frame more weight', 2),
+    ('HIGHLIGHTS', 'Preserve Highlights', 'Limit exposure to retain bright color detail', 3),
+    ('SHADOWS', 'Preserve Shadows', 'Raise exposure when the darker tones need more light', 4),
 )
 _FILM_MODES = ('FILM_CENTER', 'FILM_MEDIAN')
-MODES = tuple((*entry, number) for number, entry in enumerate(_PHOTO_MODES)) + (
-    ('SPOT', 'Spot', 'Meter a circular area of the developed image for 18% gray', 7),)
 _LEGACY = (('FILM_CENTER', 'Saved Center-Weighted', 'Retain the exposure in this saved project', 5),
            ('FILM_MEDIAN', 'Saved Median', 'Retain the exposure in this saved project', 6))
-STORED_MODES = MODES + _LEGACY
+STORED_MODES = (('AS_SHOT', 'As Shot', 'Keep the original exposure', 0),) + MODES + _LEGACY
 _LEGACY_MENUS = {item[0]: MODES + (item,) for item in _LEGACY}
 _NUMBERS = {item[0]: item[3] for item in STORED_MODES}
 _IDENTIFIERS = {item[3]: item[0] for item in STORED_MODES}
@@ -33,14 +32,21 @@ def mode_items(node, context):
 
 
 def get_mode(node):
-    return _NUMBERS[node.auto_exposure]
+    return _NUMBERS['SPOT' if node.auto_exposure == 'AS_SHOT' else node.auto_exposure]
 
 
 def set_mode(node, value):
     node.auto_exposure = _IDENTIFIERS[value]
 
 
-_AUTO_MODES = tuple(item[0] for item in _PHOTO_MODES[1:])
+def set_as_shot(node, enabled):
+    if enabled:
+        node.auto_exposure = 'AS_SHOT'
+    elif node.auto_exposure == 'AS_SHOT':
+        node.auto_exposure = 'SPOT'
+
+
+_AUTO_MODES = tuple(item[0] for item in MODES if item[0] != 'SPOT')
 _HEADER_PREFIX = 'PhotoEditor:MeterEV1:'
 _CENTER_HEADER = 'PhotoEditor:MeterEV2:CENTER'
 _SAMPLE_AXIS = 128

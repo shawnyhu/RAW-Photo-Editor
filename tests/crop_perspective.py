@@ -9,7 +9,7 @@ import bpy
 import numpy as np
 import OpenImageIO as oiio
 from bl_ext.user_default.raw_photo_editor import (
-    catalog, compositor, crop_detect, crop_geometry as g, crop_node, jobs, native_effects, scene_pipeline)
+    adjust_effects, catalog, compositor, crop_detect, crop_geometry as g, crop_node, jobs, native_effects, scene_pipeline)
 
 
 def geometry():
@@ -139,6 +139,11 @@ def gallery(folder):
     with crop_node.reference(scene,node) as reference:
         source_dims=tuple(reference.size)
         assert source_dims[0]!=source_dims[1] and min(source_dims)>10,source_dims
+    # Color cards after a Crop keep the cropped image domain in preview and full export.
+    for kind in adjust_effects.NODES:
+        native_effects.create_effect(scene,kind,photo=photo)
+        for mode in ('PREVIEW','RENDER'):
+            assert crop_node.terminal_dimensions(scene,*source_dims,mode)==(min(source_dims),)*2, (kind,mode)
     settings=scene.render.image_settings
     settings.file_format,settings.color_mode='PNG','RGBA'
     # The camera RAW is decoded in a separate installed Blender process.

@@ -12,7 +12,7 @@ import bpy
 from bpy.app.handlers import persistent
 from bpy.props import StringProperty
 
-from . import catalog, compositor, crop_node, film_node
+from . import adjust_effects, catalog, compositor, crop_node, film_node
 
 
 KIND_TAG = "photo_editor_native_effect"
@@ -26,6 +26,8 @@ _group_owners = {}
 _ownership_signature = None
 _ownership_dirty = True
 _ui_original_draw = None
+_menu_original_draw = None
+_menu_callbacks = None
 _ui_ready_regions = set()
 _ui_pending_regions = set()
 _ui_reset_scene = None
@@ -249,7 +251,7 @@ def _has_processing(tree, memo=None, ancestors=()):
 def effect_node(effect):
     """Return the processing node owned by a photo effect, if it has one."""
     tree = effect.node_group if effect else None
-    if tree and tree.get(KIND_TAG) in _processing_types():
+    if tree and (tree.get(KIND_TAG) in _processing_types() or tree.get(KIND_TAG) in adjust_effects.NODES):
         return next((node for node in tree.nodes if node.get(PRIMARY_NODE_TAG)), None)
     return None
 
@@ -369,7 +371,7 @@ def _create_effect(scene, kind, *, photo=None, group=None):
     """Append an independent photo stage or editable Custom Compositor effect."""
     names = {compositor.READER_TYPE: 'Raw Reader', compositor.DEVELOPER_TYPE: 'Raw Developer',
              film_node.FILM_TYPE: 'Spektrafilm Lite', film_node.OFX_TYPE: 'Spektrafilm OFX',
-             crop_node.TYPE: 'Crop & Perspective', CUSTOM_TYPE: 'Custom Compositor'}
+             crop_node.TYPE: 'Crop & Perspective', CUSTOM_TYPE: 'Custom Compositor', **adjust_effects.NODES}
     if kind not in names:
         raise ValueError(f'Unsupported photo effect: {kind}')
     if kind == CUSTOM_TYPE and group:
@@ -390,7 +392,7 @@ def _create_effect(scene, kind, *, photo=None, group=None):
             node[PRIMARY_NODE_TAG] = True
             node.location = (0, 80)
             if kind != compositor.READER_TYPE:
-                tree.links.new(source.outputs['Image'], node.inputs['Image'])
+                tree.links.new(source.outputs['Image'], adjust_effects.image_socket(node.inputs, kind))
             elif photo:
                 compositor._bind_node(node, photo)
             if kind == compositor.DEVELOPER_TYPE:
@@ -400,11 +402,12 @@ def _create_effect(scene, kind, *, photo=None, group=None):
                 socket.default_value = 0.0
                 socket.min_value, socket.max_value = -12.0, 12.0
                 socket.description = 'Exposure compensation in stops'
+                socket.hide_in_modifier = True  # The Auto Exposure section draws this input.
                 tree.links.new(source.outputs['Exposure'], node.inputs['Exposure'])
                 if photo:
                     node.photo_uid = photo.uid
                     compositor._copy_photo_recipe(node, photo)
-            tree.links.new(node.outputs['Image'], output.inputs['Image'])
+            tree.links.new(adjust_effects.image_socket(node.outputs, kind), output.inputs['Image'])
             tree.nodes.active = node
     effect = scene.compositor_effects.new(names[kind])
     effect.node_group = tree
@@ -611,7 +614,7 @@ class BR_OT_reset_native_effect(bpy.types.Operator):
         effect = (context.scene.compositor_effects.get(self.effect_name) if self.effect_name
                   else context.scene.compositor_effects.active)
         node = effect_node(effect)
-        if not node or node.bl_idname == compositor.READER_TYPE:
+        if not node or node.bl_idname in adjust_effects.NODES or node.bl_idname == compositor.READER_TYPE:
             return {'CANCELLED'}
         if node.bl_idname == compositor.DEVELOPER_TYPE:
             compositor.reset_developer(node, context)
@@ -654,7 +657,7 @@ class BR_PT_native_effect_controls(bpy.types.Panel):
             return
         effect = self.custom_data
         node = effect_node(effect)
-        if node and node.bl_idname != compositor.READER_TYPE:
+        if node and node.bl_idname not in adjust_effects.NODES and node.bl_idname != compositor.READER_TYPE:
             self.layout.operator(BR_OT_reset_native_effect.bl_idname, text='',
                                  icon='LOOP_BACK', emboss=False).effect_name = effect.name
 
@@ -680,13 +683,16 @@ class BR_PT_native_effect_controls(bpy.types.Panel):
         if owners > 1:
             layout.label(text='Preparing independent effect controls…', icon='INFO')
             return
+        if node.bl_idname in adjust_effects.NODES:
+            adjust_effects.draw(layout, node)
+            return
         if node.bl_idname == compositor.READER_TYPE:
             node.draw_buttons(context, layout)
             photo = catalog.lookup_photo(None, node.photo_uid)
             if photo:
                 _draw_metadata(layout, photo)
         elif node.bl_idname == compositor.DEVELOPER_TYPE:
-            node.draw_controls(layout, show_source=True)
+            node.draw_controls(layout, show_source=True, effect=effect)
         else:
             node.draw_buttons(context, layout)
         state = compositor._preview_status(node)
@@ -696,15 +702,75 @@ class BR_PT_native_effect_controls(bpy.types.Panel):
             layout.label(text=state[1], icon_value=node_status.icon_id(state[0]))
 
 
-def _add_menu(self, _context):
+def _effect_entries(layout, entries):
+    for kind, label in entries:
+        layout.operator(BR_OT_add_native_effect.bl_idname, text=label, icon='NODE_COMPOSITING').kind = kind
+
+
+class BR_MT_adjust_effects(bpy.types.Menu):
+    bl_label = 'Adjust'
+
+    def draw(self, _context):
+        _effect_entries(self.layout, adjust_effects.NODES.items())
+
+
+_RAW_ENTRIES = ((compositor.READER_TYPE, 'Raw Reader'), (compositor.DEVELOPER_TYPE, 'Raw Developer'))
+_FILM_ENTRIES = ((film_node.FILM_TYPE, 'Spektrafilm Lite'), (film_node.OFX_TYPE, 'Spektrafilm OFX'))
+_COMPOSITOR_ENTRIES = ((crop_node.TYPE, 'Crop & Perspective'), (CUSTOM_TYPE, 'Custom Compositor'))
+
+
+def _other_scene_entries(self, _context):
     self.layout.separator()
-    for kind, label in ((compositor.READER_TYPE, 'Raw Reader'),
-                        (compositor.DEVELOPER_TYPE, 'Raw Developer'),
-                        (film_node.FILM_TYPE, 'Spektrafilm Lite'),
-                        (film_node.OFX_TYPE, 'Spektrafilm OFX'), (crop_node.TYPE, 'Crop & Perspective'),
-                        (CUSTOM_TYPE, 'Custom Compositor')):
-        op = self.layout.operator(BR_OT_add_native_effect.bl_idname, text=label, icon='NODE_COMPOSITING')
-        op.kind = kind
+    self.layout.menu('BR_MT_adjust_effects')
+    _effect_entries(self.layout, (*_RAW_ENTRIES, *_FILM_ENTRIES, *_COMPOSITOR_ENTRIES))
+
+
+def _add_menu(self, context):
+    if not (context.workspace.get('blender_raw_workspace') or context.scene.get(compositor.STUDIO_TAG)):
+        _menu_original_draw(self, context)
+        _other_scene_entries(self, context)
+        return
+    layout = self.layout
+    if layout.operator_context == 'EXEC_REGION_WIN':
+        layout.operator_context = 'INVOKE_REGION_WIN'
+        layout.operator('WM_OT_search_single_menu', text='Search...', icon='VIEWZOOM').menu_idname = (
+            'SCENE_MT_add_compositor_effect')
+        layout.separator()
+    layout.operator_context = 'INVOKE_REGION_WIN'
+    layout.menu('BR_MT_adjust_effects')
+    layout.menu_contents('SCENE_MT_add_compositor_effect_root_catalogs')
+    layout.separator()
+    _effect_entries(layout, _FILM_ENTRIES)
+    layout.separator()
+    _effect_entries(layout, (*_RAW_ENTRIES, *_COMPOSITOR_ENTRIES))
+
+
+def _install_effect_menu():
+    global _menu_original_draw, _menu_callbacks
+    menu = bpy.types.SCENE_MT_add_compositor_effect
+    # Replace Blender's one built-in callback in place. Other extensions may
+    # already have prepended/appended their callbacks, and may do so later.
+    _menu_callbacks = menu._dyn_ui_initialize()
+    for index, draw in enumerate(_menu_callbacks):
+        if draw.__module__ == 'bl_ui.properties_compositor' and draw.__name__ == 'draw':
+            _menu_original_draw = draw
+            _menu_callbacks[index] = _add_menu
+            return
+    # A third-party menu replacement still owns its layout.
+    menu.append(_other_scene_entries)
+
+
+def _uninstall_effect_menu():
+    global _menu_original_draw, _menu_callbacks
+    menu = bpy.types.SCENE_MT_add_compositor_effect
+    if _add_menu in _menu_callbacks:
+        _menu_callbacks[_menu_callbacks.index(_add_menu)] = _menu_original_draw
+        if len(_menu_callbacks) == 1 and getattr(menu.draw, '_draw_funcs', None) is _menu_callbacks:
+            menu.draw = _menu_original_draw
+    elif _other_scene_entries in _menu_callbacks:
+        _menu_callbacks.remove(_other_scene_entries)
+    _menu_original_draw = None
+    _menu_callbacks = None
 
 
 @persistent
@@ -777,7 +843,7 @@ def sync_stack_changes():
         del _structure_signatures[key]
 
 
-_classes = (BR_OT_add_native_effect, BR_OT_duplicate_native_effect, BR_OT_reset_native_effect,
+_classes = (BR_OT_add_native_effect, BR_OT_duplicate_native_effect, BR_OT_reset_native_effect, BR_MT_adjust_effects,
             BR_PT_native_effect_controls)
 _handlers = ('depsgraph_update_post', 'undo_post', 'redo_post', 'load_post', 'save_pre')
 
@@ -787,7 +853,7 @@ def register():
     _ui_install()
     for cls in _classes:
         bpy.utils.register_class(cls)
-    bpy.types.SCENE_MT_add_compositor_effect.append(_add_menu)
+    _install_effect_menu()
     for name in _handlers:
         getattr(bpy.app.handlers, name).append(_isolate_handler)
     _registered = True
@@ -807,7 +873,7 @@ def unregister():
         handlers = getattr(bpy.app.handlers, name)
         if _isolate_handler in handlers:
             handlers.remove(_isolate_handler)
-    bpy.types.SCENE_MT_add_compositor_effect.remove(_add_menu)
+    _uninstall_effect_menu()
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)
     _ui_uninstall()

@@ -62,6 +62,8 @@ jobs:
         run: |
           set -euo pipefail
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/native_install_smoke.py
+          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/adjust_effect_cards.py -- --installed
+          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/developer_meter_controls.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/batch_export_format.py -- --installed
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/import_batch_paths.py
           "$BLENDER" -b --factory-startup --offline-mode --python-exit-code 1 --python tests/preview_scheduling.py
@@ -79,6 +81,13 @@ jobs:
           set -euo pipefail
           "$BLENDER" --offline-mode --enable-event-simulate --window-geometry 30 30 1000 720 --python-exit-code 1 --python tests/crop_perspective_ui.py -- "$RUNNER_TEMP/crop-ui-passed"
           test -f "$RUNNER_TEMP/crop-ui-passed"
+      - name: Verify the color cards and viewer background in a Blender window
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$BLENDER" --offline-mode --window-geometry 30 30 1200 850 --python-exit-code 1 --python tests/adjust_effect_cards.py -- --installed --ui
+          "$BLENDER" --offline-mode --enable-event-simulate --window-geometry 30 30 1200 850 --python-exit-code 1 --python tests/viewer_background_ui.py -- "$RUNNER_TEMP/viewer-background" --installed
+          test -f "$RUNNER_TEMP/viewer-background/passed"
       - name: Audit the installer and produce matching source without prior history
         run: |
           version="${{ steps.build.outputs.version }}"
@@ -135,6 +144,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/native_install_smoke.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/adjust_effect_cards.py -- --installed
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $blender -b --offline-mode --python-exit-code 1 --python tests/developer_meter_controls.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/batch_export_format.py -- --installed
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & $blender -b --offline-mode --python-exit-code 1 --python tests/import_batch_paths.py
