@@ -82,3 +82,5 @@ Lite 现在从当前节点保存预设。之前的外部文件导入操作也会
 预设在当前系统用户的 Blender 配置目录下，每个预设一个 JSON 文件。路径独立于 Blender 版本和扩展安装目录，重命名保留文件 ID，写入时用临时文件原子替换。备份和换机路径见[用户指南](workflow.md)。Windows 5.3.0 离线安装同一份 ZIP 后，在两个独立进程的新工程间保存、重命名、应用和删除预设，并验证目标 Live Preview 开关的两种状态。窗口测试在第二张卡片选中时，点开第一张的 Presets 并套用，通过两张不同的颗粒量校验实际操作对象。[跨进程回归](../tests/spektrafilm_user_preset_flow.py) · [卡片点击回归](../tests/spektrafilm_user_presets_ui.py) · [持久化与写入冲突](../tests/film_user_library.py)
 
 Grid 只在创建照片工作区查看器时设置默认值。Windows 5.3.0 窗口验证了新工作区关闭网格，用户手动打开后重新进入工作区、保存并重开工程均能保留。[查看器回归](../tests/viewer_background_ui.py)
+
+公开测试包对应提交 [7f3555e](https://github.com/shawnyhu/RAW-Photo-Editor/commit/7f3555e3ebd63dfb1aacb1acd267daad5018fc2d)。Apple Silicon 和 Windows x64 用 Blender 5.3.0 安装同一个 ZIP，通过了两次独立启动之间的预设保存与调用。另在 Windows 将同一个系统账户指向两个全新的插件安装配置，使用真实的用户预设路径，第二套配置仍可读取第一套保存的胶片参数。之后的 Blender 大版本需在对应版本发布时再次验证扩展兼容性。安装包 SHA-256 为 `d7704cb93d17570b729f85c927fdf5bf5effa76b28d6f0b6252d3ea654eec55f`。[跨平台验证记录](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45947138524)
