@@ -74,3 +74,11 @@ Raw Developer 按 **Camera & Look**、**White Balance**、**Auto Exposure** 分�
 查看器的底色由 Photo Workspace 保存。Image Editor 按实际缩放和平移坐标填充照片外的区域，三档颜色分别为黑、深灰和浅灰。回归从真实窗口读取颜色，对比图内半透明像素、相邻图库、全局主题及导出 PNG，并检查工作区设置能随工程保存。[绘制逻辑](../blender_raw/viewer_background.py) · [窗口测试](../tests/viewer_background_ui.py)
 
 测试包对应提交 [e9ee18b](https://github.com/shawnyhu/RAW-Photo-Editor/commit/e9ee18b2f2f501c63408b27200ce243505b9ce95)。Windows 本地用 beta.2 创建工程，再用 beta.3 重开，核对四种已存测光模式、原生曝光输入上的两帧动画以及两个既有自定义效果。公开 CI 在 Apple Silicon 的 Blender 5.3.0 窗口检查了九张卡片的实际控件、曲线编辑器和查看器三档背景；Windows x64 安装同一份 ZIP 完成后台回归。安装包 SHA-256 为 `47f288cd7b94da275f651117dc8cf43df20570eb2f75f1a6af2a9bb3636d2460`。[验证记录](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45930095218)
+
+## 2026-11-27 · Spektrafilm Lite 用户预设和查看器网格（1.0.2-beta.4）
+
+Lite 现在从当前节点保存预设。之前的外部文件导入操作也会写入上游 Developer 的部分设置，新入口只读写胶片参数。保存的内容涵盖胶片、相纸、工艺、颗粒、扩散、扫描，以及既有节点从旧预设继承的校准系数。套用前先验证整份设置，更新后合并请求一次预览。节点的播放状态、折叠状态、原片及上游设置由目标工程管理。[参数与校准](../blender_raw/film_user_settings.py) · [参数边界回归](../tests/spektrafilm_user_settings.py)
+
+预设在当前系统用户的 Blender 配置目录下，每个预设一个 JSON 文件。路径独立于 Blender 版本和扩展安装目录，重命名保留文件 ID，写入时用临时文件原子替换。备份和换机路径见[用户指南](workflow.md)。Windows 5.3.0 离线安装同一份 ZIP 后，在两个独立进程的新工程间保存、重命名、应用和删除预设，并验证目标 Live Preview 开关的两种状态。窗口测试在第二张卡片选中时，点开第一张的 Presets 并套用，通过两张不同的颗粒量校验实际操作对象。[跨进程回归](../tests/spektrafilm_user_preset_flow.py) · [卡片点击回归](../tests/spektrafilm_user_presets_ui.py) · [持久化与写入冲突](../tests/film_user_library.py)
+
+Grid 只在创建照片工作区查看器时设置默认值。Windows 5.3.0 窗口验证了新工作区关闭网格，用户手动打开后重新进入工作区、保存并重开工程均能保留。[查看器回归](../tests/viewer_background_ui.py)

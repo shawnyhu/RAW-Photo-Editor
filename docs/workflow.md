@@ -10,6 +10,8 @@ In **Raw Developer**, **Camera & Look** selects the camera input and look. **Whi
 
 In the Photo Workspace image viewer, press **N**, open **Editor**, and choose **Black**, **Dark Gray** or **Light Gray** under **Canvas Background**. Black is the default. The choice follows the workspace when switching photos and is saved with the project.
 
+New Photo Workspaces start with **Overlays → Guides → Grid** off. Turn it on there to save a different choice with the project.
+
 ## Crop and perspective
 
 Add **Crop & Perspective** near the end of the effect stack to frame the finished image.
@@ -26,7 +28,11 @@ Press **Enter** to apply or **Esc** to discard the current drag session. Each ap
 
 ## Film and compositor effects
 
-**Spektrafilm Lite** uses the bundled film engine. Import a `.sfpreset` or select a film and print stock. **Spektrafilm OFX** runs the official plugin in a separate process and requires a complete installation of that plugin. Use **Locate Spektrafilm OFX Folder** if Blender cannot find it. The **?** beside a control reads its help from the installed plugin. **Built-in Looks** opens that installation’s preset menu. [Official OFX download](https://spektrafilm.114c.de/)
+**Spektrafilm Lite** uses the bundled film engine. Choose a film and print stock, adjust the look, then open **Presets → Save Current as Preset** and give it a name. On any Lite node, click the name in **Presets** to apply the look. The pencil renames an entry and the × deletes it from the library. Applying a look keeps the destination node's Live Preview setting. Projects retain the applied settings even if you later delete the preset.
+
+Presets are shared across projects and Blender versions for the current OS user. For backup or transfer to another computer, copy the **Spektrafilm Lite** folder. On macOS it is in `~/Library/Application Support/Blender/RAW Photo Editor/`. On Windows it is in `%APPDATA%\Blender Foundation\Blender\RAW Photo Editor\`.
+
+**Spektrafilm OFX** runs the official plugin in a separate process and requires a complete installation of that plugin. Use **Locate Spektrafilm OFX Folder** if Blender cannot find it. The **?** beside a control reads its help from the installed plugin. **Built-in Looks** opens that installation’s preset menu. [Official OFX download](https://spektrafilm.114c.de/)
 
 Open **Add Scene Effect → Adjust** to add a card for **Brightness/Contrast**, **Color Balance**, **Color Correction**, **Exposure**, **Gamma**, **Hue Correct**, **Hue/Saturation/Value**, **RGB Curves** or **Tonemap**. Edit it in the effect stack. The two Spektrafilm entries form their own group in the add menu.
 

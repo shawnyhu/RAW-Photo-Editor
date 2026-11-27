@@ -85,7 +85,7 @@ def read(path):
         raise ValueError("The Spektrafilm OFX preset exceeds 4 MiB")
     document = json.loads(raw.decode("utf-8-sig"), object_pairs_hook=_unique_keys)
     if not isinstance(document, dict) or document.get("format") != _FORMAT:
-        raise ValueError("Expected a Spektrafilm OFX .spkpreset; Mac .sfpreset files belong to Spektrafilm Lite")
+        raise ValueError("Expected a Spektrafilm OFX .spkpreset file")
     if document.get("payload_encoding") != _ENCODING:
         raise ValueError("Unsupported Spektrafilm OFX preset payload encoding")
     name = document.get("name", path.stem)

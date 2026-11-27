@@ -1,6 +1,6 @@
 schema_version = "1.0.0"
 id = "raw_photo_editor"
-version = "1.0.2-beta.3"
+version = "1.0.2-beta.4"
 name = "RAW Photo Editor"
 tagline = "Lightweight, open-source RAW development and film simulation"
 maintainer = "ShawnHu"
@@ -17,7 +17,7 @@ wheels = [
 ]
 
 [permissions]
-files = "Read photos, profiles and LUTs, cache previews and export images"
+files = "Read photos and profiles, save presets, cache and export images"
 
 [build]
 paths_exclude_pattern = ["__pycache__/", "*.pyc", ".git/", ".DS_Store", "*.zip"]

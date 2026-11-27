@@ -1509,6 +1509,7 @@ def _configure_editors(window, areas):
     left.spaces.active.show_region_ui = False
     top.type = 'IMAGE_EDITOR'
     top.spaces.active.mode = 'VIEW'
+    top.spaces.active.overlay.show_grid_background = False
     top.spaces.active.show_region_ui = True
     viewer = compositor.viewer_image()
     if viewer:

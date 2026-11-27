@@ -236,6 +236,30 @@ def test():
     assert not viewer_background.BR_PT_viewer_background.poll(bpy.context)
     print('PASS Viewer canvas: three real colors, unchanged image/alpha/export, pan/zoom/clipping, Editor card, scene/image switching, workspace save and untouched theme',flush=True)
 
+    # A fresh Photo Workspace starts with Grid off. An existing workspace
+    # carries its own native overlay settings when reopened.
+    area.spaces.active.overlay.show_grid_background = True
+    with bpy.context.temp_override(window=window, area=area):
+        assert bpy.ops.blender_raw.new_workspace() == {'FINISHED'}
+    while gallery._timers:
+        yield
+    assert window.workspace != workspace and window.workspace.get('blender_raw_workspace')
+    viewer_area, _ = gallery.viewer_column(window.screen)
+    assert not viewer_area.spaces.active.overlay.show_grid_background
+    assert area.spaces.active.overlay.show_grid_background
+    viewer_area.spaces.active.overlay.show_grid_background = True
+    with bpy.context.temp_override(window=window, area=viewer_area):
+        assert bpy.ops.blender_raw.open_workspace() == {'FINISHED'}
+    while gallery._timers:
+        yield
+    assert viewer_area.spaces.active.overlay.show_grid_background
+    project = str(folder / 'viewer-grid.blend')
+    assert bpy.ops.wm.save_as_mainfile(filepath=project) == {'FINISHED'}
+    assert bpy.ops.wm.open_mainfile(filepath=project, load_ui=True) == {'FINISHED'}
+    viewer_area, _ = gallery.viewer_column(bpy.context.window_manager.windows[0].screen)
+    assert viewer_area.spaces.active.overlay.show_grid_background
+    print('PASS Viewer grid: off by default, ordinary editor untouched, manual choice survives workspace and file reopen', flush=True)
+
 
 steps=test()
 deadline=time.monotonic()+90

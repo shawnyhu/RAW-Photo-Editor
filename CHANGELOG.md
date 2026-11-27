@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2-beta.4 — 2026-11-27
+
+- In **Spektrafilm Lite → Presets**, save the current node settings under a name, apply a saved look, rename it or delete it. The library is shared across projects and Blender versions on the same user account. Applying a look preserves the destination node's Live Preview setting.
+- Grid starts off in newly created Photo Workspace image viewers. The viewer saves subsequent changes to Grid with the project.
+
 ## 1.0.2-beta.3 — 2026-11-27
 
 - In the photo editor, **Add Scene Effect → Adjust** contains nine native color adjustment cards. Spektrafilm Lite and OFX have their own section. Use **Custom Compositor** for an editable node group.

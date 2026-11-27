@@ -15,6 +15,7 @@ FILM_TYPE = "BlenderPhotoSpektrafilm"
 OFX_TYPE = "BlenderPhotoSpektrafilmOFX"
 FILM_TYPES = (FILM_TYPE, OFX_TYPE)
 _connections = {}
+_applying_user_preset = set()
 
 
 def backend_error(node):
@@ -156,7 +157,7 @@ def _zero_ev(node, value, stored_value, is_set):
 
 
 def _request(node, _context=None):
-    if node.node_tree:
+    if node.as_pointer() not in _applying_user_preset and node.node_tree:
         from . import film_preview
         film_preview.request(node)
 
@@ -205,6 +206,8 @@ def _dir_value(key):
 
 
 def _film_changed(node, _context=None):
+    if node.as_pointer() in _applying_user_preset:
+        return
     stock = _current_film(node)
     try:
         valid = stock in spektrafilm_engine.stocks()[0]
@@ -283,6 +286,7 @@ def _action(layout, operator, node, text, icon):
     op = layout.operator(operator, text=text, icon=icon)
     op.tree_name = node.id_data.name
     op.node_name = node.name
+    return op
 
 
 def draw_insert(layout, developer):
@@ -456,7 +460,9 @@ class BR_NODE_spektrafilm(bpy.types.CompositorNodeCustomGroup):
                 body.prop(self, effect.key)
 
     def draw_buttons(self, context, layout):
-        _action(layout, "blender_raw.import_spektrafilm_preset", self, "Import .sfpreset", "FILE_FOLDER")
+        presets = layout.row()
+        presets.context_pointer_set("spektrafilm_preset_node", self)
+        presets.popover(panel="BR_PT_spektrafilm_presets", text="Presets", icon="PRESET")
         error = spektrafilm_engine.backend_error()
         if not error:
             layout.prop(self, "live_preview", text="Live Preview", toggle=True,
@@ -607,52 +613,24 @@ class BR_OT_refresh_spektrafilm(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class BR_OT_import_spektrafilm_preset(bpy.types.Operator):
-    bl_idname = "blender_raw.import_spektrafilm_preset"
-    bl_label = "Import Spektrafilm Preset"
-    bl_description = ("Load a Mac .sfpreset and apply its white balance and lens correction "
-                      "to a connected Apple Raw Developer")
-    bl_options = {"REGISTER", "UNDO"}
-    tree_name: StringProperty(options={"HIDDEN"})
-    node_name: StringProperty(options={"HIDDEN"})
-    filepath: StringProperty(subtype="FILE_PATH")
-    filter_glob: StringProperty(default="*.sfpreset", options={"HIDDEN"})
-
-    def invoke(self, context, event):
-        context.window_manager.fileselect_add(self)
-        return {"RUNNING_MODAL"}
-
-    def execute(self, context):
-        node = _operator_node(self, context, FILM_TYPE)
-        if not node:
-            self.report({"ERROR"}, "Choose an editable Spektrafilm node")
-            return {"CANCELLED"}
-        try:
-            notices = load_preset(node, bpy.path.abspath(self.filepath))
-        except (OSError, RuntimeError, ValueError, RecursionError) as error:
-            self.report({"ERROR"}, str(error))
-            return {"CANCELLED"}
-        for notice in notices:
-            self.report({"WARNING"}, notice)
-        return {"FINISHED"}
-
-
 _CLASSES = (BR_NODE_spektrafilm, BR_OT_add_spektrafilm, BR_OT_refresh_spektrafilm,
-            BR_OT_import_spektrafilm_preset, BR_OT_reset_film_calibration)
+            BR_OT_reset_film_calibration)
 
 
 def register():
     for cls in _CLASSES:
         bpy.utils.register_class(cls)
-    from . import ofx_config, ofx_node
+    from . import film_user_presets, ofx_config, ofx_node
+    film_user_presets.register()
     ofx_config.register()
     ofx_node.register()
 
 
 def unregister():
-    from . import ofx_config, ofx_node
+    from . import film_user_presets, ofx_config, ofx_node
     ofx_node.unregister()
     ofx_config.unregister()
+    film_user_presets.unregister()
     _connections.clear()
     for cls in reversed(_CLASSES):
         bpy.utils.unregister_class(cls)

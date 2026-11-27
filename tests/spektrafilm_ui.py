@@ -154,7 +154,7 @@ def run(folder):
         yield
     for region_type, drawn in layouts.items():
         assert "Camera Diffusion" in drawn and "Particle Area" not in drawn
-        assert drawn.index("Live Preview") < drawn.index("Import .sfpreset")
+        assert "Presets" in drawn and "Import .sfpreset" not in drawn
         assert {(region_type, False, "PLAY"), (region_type, True, "PAUSE")} <= icons, icons
 
     # Gallery navigation replaces the scene effect and the graph shown in the editor.

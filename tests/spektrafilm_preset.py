@@ -93,8 +93,7 @@ def run(folder):
     np.testing.assert_allclose(film_node.recipe(node)["effects"]["halationStrength"], [0.6, 0.8, 0.2])
 
     write({"bools": {"grainEnabled": True}})
-    assert bpy.ops.blender_raw.import_spektrafilm_preset(tree_name=tree_name, node_name=node_name,
-                                                        filepath=str(filepath)) == {"FINISHED"}
+    film_node.load_preset(node, filepath)
     assert node.grain and not node.scannerEnabled and not node.halation
     assert node.grain_model == "Preview"
     assert node.exposure == 0 and not node.film

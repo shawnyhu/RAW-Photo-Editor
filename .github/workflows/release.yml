@@ -64,6 +64,11 @@ jobs:
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/native_install_smoke.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/adjust_effect_cards.py -- --installed
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/developer_meter_controls.py
+          python3 tests/film_user_library.py
+          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_settings.py
+          for stage in write use; do
+            "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_preset_flow.py -- "$stage" "$RUNNER_TEMP/film-user-presets"
+          done
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/batch_export_format.py -- --installed
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/import_batch_paths.py
           "$BLENDER" -b --factory-startup --offline-mode --python-exit-code 1 --python tests/preview_scheduling.py
@@ -148,6 +153,12 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           & $blender -b --offline-mode --python-exit-code 1 --python tests/developer_meter_controls.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $blender -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_settings.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          foreach ($stage in 'write', 'use') {
+            & $blender -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_preset_flow.py -- $stage "$env:RUNNER_TEMP/film-user-presets"
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
           & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/batch_export_format.py -- --installed
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & $blender -b --offline-mode --python-exit-code 1 --python tests/import_batch_paths.py

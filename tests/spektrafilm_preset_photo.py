@@ -94,8 +94,7 @@ with TemporaryDirectory() as tmp:
     for decoder in ("AUTO", "APPLE"):
         # The user chooses the decoder. The standalone comparison uses Apple RAW.
         dev.camera_input = decoder
-        assert bpy.ops.blender_raw.import_spektrafilm_preset(tree_name=tree.name, node_name=film.name,
-                                                            filepath=str(local_preset)) == {"FINISHED"}
+        film_node.load_preset(film, local_preset)
         assert (dev.camera_input, film.film, film.paper) == (decoder, "kodak_portra_800", "kodak_2383")
         assert dev.auto_exposure == "GLOBAL" and dev.exposure == 0
     dev.auto_exposure, dev.exposure = "AS_SHOT", REFERENCE_EV
