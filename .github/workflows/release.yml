@@ -5,7 +5,7 @@ on:
     paths: ['blender_raw/**', 'tests/**', '.github/workflows/release.yml', 'CHANGELOG.md']
   push:
     branches: [main]
-    paths: ['blender_raw/blender_manifest.toml']
+    paths: ['blender_raw/blender_manifest.toml', '.github/workflows/release.yml']
   workflow_dispatch:
     inputs:
       macos_runner:
@@ -21,7 +21,9 @@ jobs:
   install-and-test:
     needs: decoder
     runs-on: ${{ inputs.macos_runner || 'macos-15' }}
-    timeout-minutes: 20
+    # Hosted Metal recorded 180 of 672 reference renders in 18 minutes.
+    # The same job also renders all 672 candidate images and the stock checks.
+    timeout-minutes: 240
     outputs:
       digest: ${{ steps.upload.outputs.artifact-digest }}
       version: ${{ steps.build.outputs.version }}
