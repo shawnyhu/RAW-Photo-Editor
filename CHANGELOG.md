@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.2-beta.6 — 2026-11-27
+
+- Film and Print now open brand-column menus with readable stock names and the current selection marked. Print choices are filtered to supported materials for the selected film.
+- Selecting any film loads its complete recommended starting settings: print material or direct slide scanning, development calibration, DIR, grain and halation parameters. Diffusion and scanner settings reset to neutral defaults. Grain and halation start disabled; their physical stock settings are ready when enabled. **Restore Film Defaults** reapplies the selected film's starting settings. Live Preview and upstream RAW development are preserved.
+- Added eight black-and-white films and two black-and-white print materials, bringing Lite to **64 films and 14 print materials**. Black-and-white uses single-channel exposure and silver density, with the source's reference development curve and grain layers. Tri-X 7266 uses direct reversal scanning. Tri-X 400 / D-76 and Ilford Multigrade RC Deluxe grade 2 retain their source's experimental status; the latter models a fixed paper grade and normalized black-and-white printing.
+- DIR calibration is internal to the film model and no longer appears as an editable Lite panel. Existing projects and saved personal looks retain their stored settings; the new defaults apply when a film is explicitly selected or restored.
+- Removed the four bundled creative presets. **Presets** is now the user's personal library; existing saved copies remain available for applying, renaming and deleting.
+
 ## 1.0.2-beta.5 — 2026-11-27
 
 - Spektrafilm Lite ships four built-in presets: **FUJI Pro 400H**, **FUJI Provia100f**, **KODAK Ektar 100** and **KODAK Portra 800**. Open **Presets → Built-in Presets** on any Lite node to apply one. Save an edited version under a name in your personal library.

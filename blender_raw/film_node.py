@@ -61,15 +61,20 @@ def load_preset(node, path):
 
     name, settings, fields, parameters = film_preset.read(path)
     notice = compositor.apply_spektrafilm_developer(node, settings)
-    for prop in film_preset.NODE_PROPERTIES.values():
-        if prop in fields:
-            setattr(node, prop, fields[prop])
-        elif node.is_property_set(prop):
-            node.property_unset(prop)
-    node.preset_parameters = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
-    node.preset_name = name
-    node.preset_film = fields.get("film") or spektrafilm_engine.default_film()
-    node.use_stock_calibration = False
+    pointer = node.as_pointer()
+    _applying_user_preset.add(pointer)
+    try:
+        for prop in film_preset.NODE_PROPERTIES.values():
+            if prop in fields:
+                setattr(node, prop, fields[prop])
+            elif node.is_property_set(prop):
+                node.property_unset(prop)
+        node.preset_parameters = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
+        node.preset_name = name
+        node.preset_film = fields.get("film") or spektrafilm_engine.default_film()
+        node.use_stock_calibration = False
+    finally:
+        _applying_user_preset.discard(pointer)
     _request(node)
     notices = [notice] if notice else []
     encoding = settings.get("ints", {}).get("outputColorSpace")
@@ -147,10 +152,7 @@ def reset_recipe(node):
         from . import ofx_node
         return ofx_node.reset_recipe(node)
     from . import film_preview
-    for field in ("preset_parameters", "preset_name", "preset_film", "use_stock_calibration",
-                  "film", "paper", "process", "scanNegativeInvert",
-                  "grain", "grain_model", "halation", *BY_KEY):
-        node.property_unset(field)
+    apply_stock_defaults(node, spektrafilm_engine.default_film())
     reset_legacy_exposure(node)
     film_preview.discard_scan(node)
     film_preview.request(node)
@@ -219,23 +221,44 @@ def _film_changed(node, _context=None):
     except (OSError, RuntimeError):
         valid = False
     if valid:
-        # Preserve unattributed legacy custom matrices when simply opening a
-        # file, but an explicit stock selection must not carry them forward.
-        if not node.preset_film and node.preset_parameters:
-            inherited = _stored_parameters(node.preset_parameters)
-            if any(key in inherited for key in DIR_MATRIX_PARAMETERS):
-                node.use_stock_calibration = True
-        # The four coefficients describe the chosen stock. Artistic DIR amounts
-        # and all unrelated effects survive a stock change.
-        for key in DIR_MATRIX_PARAMETERS:
-            node.property_unset(key)
-        if spektrafilm_engine.added_stock_calibration(stock):
-            # Restore physical defaults for the stock's backing and grain size.
-            node.property_unset("halationStrength")
-            node.property_unset("grainParticleAreaUm2")
-        if node.process != PROCESS_MODES[2]:
-            node.process = PROCESS_MODES[1 if spektrafilm_engine.is_slide(stock) else 0]
-            node.scanNegativeInvert = False
+        apply_stock_defaults(node, stock)
+        return
+    _request(node)
+
+
+def apply_stock_defaults(node, film=None):
+    """Load a complete stock recipe on creation or explicit user selection.
+
+    Never called while loading a saved node or applying a personal preset.
+    Live Preview and the photo's upstream adjustments belong to the destination.
+    """
+    stock = film or _current_film(node)
+    record = spektrafilm_engine.stock_defaults(stock)
+    parameters = record["parameters"]
+    for key, value in parameters.items():
+        spektrafilm_engine.validate_parameter(key, value)
+    pointer = node.as_pointer()
+    _applying_user_preset.add(pointer)
+    try:
+        node.film = stock
+        node.paper = record["target_print"] or ""
+        node.process = PROCESS_MODES[1 if record["type"] == "positive" else 0]
+        node.scanNegativeInvert = False
+        node.grain = node.halation = False
+        node.grain_model = GRAIN_MODELS[0]
+        node.preset_name = ""
+        # Drop the previous look's hidden gamma, filters and process overrides.
+        node.preset_parameters = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
+        node.preset_film = stock
+        node.use_stock_calibration = True
+        for key, effect in BY_KEY.items():
+            value = parameters.get(key, effect.default)
+            if isinstance(effect.default, int) and not isinstance(effect.default, bool):
+                value = FAMILIES[value]
+            setattr(node, key, value)
+        reset_legacy_exposure(node)
+    finally:
+        _applying_user_preset.discard(pointer)
     _request(node)
 
 
@@ -256,6 +279,8 @@ def _preset_parameter(key):
 
 def _effect_property(effect, stored_in_old_presets):
     options = dict(name=effect.label, description=effect.description, update=_request)
+    if effect.key in {param.key for param in GROUPS["dir"]}:
+        options["options"] = {"HIDDEN"}
     if stored_in_old_presets:
         # Version 0.14 stored these native values in the imported preset JSON.
         # An RNA edit takes precedence, including in linked and appended node trees.
@@ -299,7 +324,8 @@ def _films(self, context, query):
 
 
 def _papers(self, context, query):
-    return _stocks(1, query)
+    return [paper for paper in _stocks(1, query)
+            if self.process == PROCESS_MODES[2] or paper in spektrafilm_engine.compatible_papers(_current_film(self))]
 
 
 def _action(layout, operator, node, text, icon):
@@ -344,7 +370,7 @@ class BR_NODE_spektrafilm(bpy.types.CompositorNodeCustomGroup):
     preset_parameters: StringProperty(options={"HIDDEN"})
     preset_film: StringProperty(options={"HIDDEN"})
     use_stock_calibration: BoolProperty(options={"HIDDEN"})
-    show_dir: BoolProperty(name="DIR Couplers", options=set())
+    show_dir: BoolProperty(options={"HIDDEN"})
     process: EnumProperty(name="Mode",
                           items=[(name, name, description, index) for index, (name, description) in enumerate(zip(
                               PROCESS_MODES, ("Simulate film, then print and scan it",
@@ -355,7 +381,7 @@ class BR_NODE_spektrafilm(bpy.types.CompositorNodeCustomGroup):
                                      description="Normalize the scan using the film stock's polarity. Leave off for a direct slide scan",
                                      get_transform=_preset_parameter("scanNegativeInvert"), update=_request)
     # Persist the engine's names instead of indices, which move as profiles are added.
-    film: StringProperty(name="Film", description="Changing stock restores its DIR calibration and selects the normal film/scan mode. Leave empty for the engine default",
+    film: StringProperty(name="Film", description="Choose a film and load its recommended print, development and effect settings",
                          search=_films, options=set(), update=_film_changed)
     paper: StringProperty(name="Print", description="Print stock; leave empty for the engine default",
                           search=_papers, options=set(), update=_request)
@@ -374,6 +400,7 @@ class BR_NODE_spektrafilm(bpy.types.CompositorNodeCustomGroup):
     def init(self, context):
         self.instance_uid = uuid.uuid4().hex
         self.node_tree = _create_group()
+        apply_stock_defaults(self, spektrafilm_engine.default_film())
 
     def copy(self, source):
         from . import adjustments
@@ -404,19 +431,19 @@ class BR_NODE_spektrafilm(bpy.types.CompositorNodeCustomGroup):
         _connections.pop((self.id_data.session_uid, self.as_pointer()), None)
 
     def _draw_stocks(self, layout):
+        from . import film_stock_ui
         if self.preset_name:
             layout.label(text=self.preset_name)
         layout.prop(self, "process")
         if self.process != PROCESS_MODES[2]:
-            layout.prop(self, "film", placeholder="Engine Default")
+            film_stock_ui.draw_stock(layout, self, "film")
+            _action(layout, "blender_raw.restore_film_defaults", self, "Restore Film Defaults", "LOOP_BACK")
         if self.process == PROCESS_MODES[1]:
             layout.prop(self, "scanNegativeInvert")
         else:
-            layout.prop(self, "paper", placeholder="Engine Default")
+            film_stock_ui.draw_stock(layout, self, "paper")
 
     def _draw_effects(self, layout, *, native_panels=False):
-        if self.process != PROCESS_MODES[2]:
-            self._draw_dir(layout, native_panels=native_panels)
         for key, label, enabled, properties in FLOW_SECTIONS:
             if self.process == PROCESS_MODES[2] and key in {"grain", "halation", "camera"}:
                 continue
@@ -451,33 +478,6 @@ class BR_NODE_spektrafilm(bpy.types.CompositorNodeCustomGroup):
                     elif name == "scannerBlackLevel":
                         field.active = self.scannerBlackCorrection
                     field.prop(self, name)
-
-    def _draw_dir(self, layout, *, native_panels=False):
-        if native_panels:
-            header, body = layout.panel_prop(self, "show_dir")
-            header.label(text="DIR Couplers")
-        else:
-            header = layout.row(align=True)
-            header.prop(self, "show_dir", text="", emboss=False,
-                        icon="TRIA_DOWN" if self.show_dir else "TRIA_RIGHT")
-            header.label(text="DIR Couplers")
-            body = layout if self.show_dir else None
-        if body is None:
-            return
-        edited = any(self.is_property_set(key) for key in DIR_MATRIX_PARAMETERS)
-        inherited = _inherited_calibration(self)
-        source = "Custom" if edited else "Preset" if any(key in inherited for key in DIR_MATRIX_PARAMETERS) else "Film defaults"
-        body.label(text="Calibration: " + source)
-        _action(body, "blender_raw.reset_film_calibration", self, "Restore Film Calibration", "LOOP_BACK")
-        for effect in GROUPS["dir"]:
-            if isinstance(effect.default, tuple):
-                body.label(text=effect.label)
-                row = body.row(align=True)
-                channels = "RGB" if len(effect.default) == 3 else {"dirGammaRToGb": "GB", "dirGammaGToRb": "RB", "dirGammaBToRg": "RG"}[effect.key]
-                for index, channel in enumerate(channels):
-                    row.prop(self, effect.key, index=index, text=channel)
-            else:
-                body.prop(self, effect.key)
 
     def draw_buttons(self, context, layout):
         presets = layout.row()
@@ -574,10 +574,10 @@ def insert_after(developer):
     return film
 
 
-class BR_OT_reset_film_calibration(bpy.types.Operator):
-    bl_idname = "blender_raw.reset_film_calibration"
-    bl_label = "Restore Film Calibration"
-    bl_description = "Restore this film's four DIR coefficient groups; keep other effect adjustments"
+class BR_OT_restore_film_defaults(bpy.types.Operator):
+    bl_idname = "blender_raw.restore_film_defaults"
+    bl_label = "Restore Film Defaults"
+    bl_description = "Restore this film's recommended print, development, grain, halation, diffusion and scanner settings"
     bl_options = {"REGISTER", "UNDO"}
     tree_name: StringProperty(options={"HIDDEN"})
     node_name: StringProperty(options={"HIDDEN"})
@@ -586,7 +586,7 @@ class BR_OT_reset_film_calibration(bpy.types.Operator):
         node = _operator_node(self, context, FILM_TYPE)
         if node is None:
             return {"CANCELLED"}
-        reset_calibration(node)
+        apply_stock_defaults(node)
         return {"FINISHED"}
 
 
@@ -634,23 +634,25 @@ class BR_OT_refresh_spektrafilm(bpy.types.Operator):
 
 
 _CLASSES = (BR_NODE_spektrafilm, BR_OT_add_spektrafilm, BR_OT_refresh_spektrafilm,
-            BR_OT_reset_film_calibration)
+            BR_OT_restore_film_defaults)
 
 
 def register():
     for cls in _CLASSES:
         bpy.utils.register_class(cls)
-    from . import film_user_presets, ofx_config, ofx_node
+    from . import film_stock_ui, film_user_presets, ofx_config, ofx_node
+    film_stock_ui.register()
     film_user_presets.register()
     ofx_config.register()
     ofx_node.register()
 
 
 def unregister():
-    from . import film_user_presets, ofx_config, ofx_node
+    from . import film_stock_ui, film_user_presets, ofx_config, ofx_node
     ofx_node.unregister()
     ofx_config.unregister()
     film_user_presets.unregister()
+    film_stock_ui.unregister()
     _connections.clear()
     for cls in reversed(_CLASSES):
         bpy.utils.unregister_class(cls)

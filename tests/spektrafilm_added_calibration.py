@@ -43,7 +43,7 @@ def close(actual, expected):
 
 def check_stocks(tree, node):
     films, papers = engine.stocks()
-    assert (len(films), len(papers)) == (56, 12), (len(films), len(papers))
+    assert (len(films), len(papers)) == (64, 14), (len(films), len(papers))
     assert len(set(films)) == len(films) and len(set(papers)) == len(papers)
     assert NEGATIVE in films[20:] and SLIDE in films[20:] and PRINT in papers[8:]
     assert all(engine.added_stock_calibration(film) is None for film in films[:20])
@@ -89,6 +89,11 @@ def check_stocks(tree, node):
     close(parameters["grainDensityMin"], (.03, .03, .03))
     areas = node.grainParticleAreaUm2 * np.asarray(parameters["grainParticleScale"])
     close(areas, (.51828355, .77606561, 5.09774039))
+    # Editing the selected stock may override its recommendation until the
+    # next explicit Film choice or Restore action.
+    stored = json.loads(node.preset_parameters)
+    stored["grainUniformity"] = [.25, .3, .35]
+    node.preset_parameters = json.dumps(stored)
     node.preset_film = NEGATIVE
     close(film_node.recipe(node)["parameters"]["grainUniformity"], (.25, .3, .35))
 
@@ -102,27 +107,29 @@ def check_stocks(tree, node):
     assert copy.paper == PRINT and film_node.recipe(copy) == film_node.recipe(node)
     copy.film = SLIDE
     close(copy.halationStrength, (.015, .005, 0))
-    close(copy.grainAmount, .67)
+    close(copy.grainAmount, 1.)
     close(copy.grainParticleAreaUm2, (.09479919 + 1.593925 + .25421191) / 3)
     close(node.grainParticleAreaUm2, .31)
     close(node.halationStrength, (.3, .23, .015))
     copy.process = "Print only"
     copy.scanNegativeInvert = True
     copy.film = NEGATIVE
-    assert copy.process == "Print only" and copy.scanNegativeInvert
+    assert copy.process == "Full Film Sim" and not copy.scanNegativeInvert
+    assert copy.paper == engine.stock_defaults(NEGATIVE)["target_print"]
     print(f"PASS {len(films) - 20} new films, {len(papers) - 8} new prints, stock and preset controls", flush=True)
 
 
 def check_persistence():
     tree = bpy.data.node_groups.new("Additional stock persistence", "CompositorNodeTree")
     tree.use_fake_user = True
-    films, papers = engine.stocks()
+    films, _papers = engine.stocks()
     expected = {}
     for index, film in enumerate(films[20:]):
         node = tree.nodes.new(film_node.FILM_TYPE)
         node.name = film
         node.film = film
-        node.paper = papers[8 + index % (len(papers) - 8)]
+        papers = engine.compatible_papers(film)
+        node.paper = papers[index % len(papers)] if papers else ""
         node.grainAmount = .67
         node.dirGammaGToRb[0] *= .75
         expected[node.name] = film_user_settings.snapshot(node), film_node.recipe(node)

@@ -133,6 +133,42 @@ def default_film():
 
 
 @lru_cache(maxsize=1)
+def _stock_catalog():
+    path = Path(__file__).resolve().parent / "vendor" / "spektrafilm" / "stock_defaults.json"
+    catalog = json.loads(path.read_bytes())
+    if catalog.get("version") != 1:
+        raise ValueError("Unsupported bundled stock defaults")
+    return catalog
+
+
+def stock_defaults(film):
+    """Source-backed settings for an explicit stock choice, never a file-load migration."""
+    stock = film or default_film()
+    try:
+        return _stock_catalog()["films"][stock]
+    except KeyError as error:
+        raise ValueError(f"Unknown film stock {stock!r}") from error
+
+
+def compatible_papers(film):
+    """Keep native ordering while excluding uncalibrated mixed color/silver paths."""
+    stock = film or default_film()
+    stock_defaults(stock)
+    papers = _stock_catalog()["papers"]
+    return tuple(paper for paper in stocks()[1] if stock in papers[paper]["compatible_films"])
+
+
+def validate_stock_pair(film, paper, process=0):
+    if process != 0:
+        return
+    stock = film or default_film()
+    material = paper or stocks()[1][_descriptors()["paper"].default_int]
+    if material not in compatible_papers(stock):
+        raise ValueError(f"{stock} and {material} are not a calibrated Film/Print pair; "
+                         "choose a compatible print material or scan the film directly")
+
+
+@lru_cache(maxsize=1)
 def _stock_grain_table():
     folder = Path(__file__).resolve().parent / "vendor" / "spektrafilm"
     with (folder / "stock_grain.toml").open("rb") as file:
@@ -156,6 +192,9 @@ def added_stock_calibration(film):
         return None
     if index < 20:
         return None
+    if index >= 56:
+        record = stock_defaults(film)
+        return FilmCalibration(record["type"] == "positive", dict(record["parameters"]))
     read = _library().photo_film_stock_calibration
     read.argtypes = [ct.c_int32, ct.POINTER(_StockCalibration)]
     read.restype = ct.c_char_p
@@ -281,6 +320,12 @@ def render_rgba(rgba, *, film="", paper="", exposure=0.0, print_exposure=0.0,
             if identifier not in choices:
                 raise ValueError(f"Unknown {key} stock {identifier!r}; choose a stock from the list")
             settings[key] = choices.index(identifier)
+    for key in ("film", "paper"):
+        if key in settings:
+            validate_parameter(key, settings[key])
+    validate_stock_pair(stocks()[0][settings.get("film", _descriptors()["film"].default_int)],
+                        stocks()[1][settings.get("paper", _descriptors()["paper"].default_int)],
+                        settings.get("process", 0))
     if "film" in settings and settings.get("process", 0) != 2:
         validate_parameter("film", settings["film"])
         stock = stocks()[0][settings["film"]]

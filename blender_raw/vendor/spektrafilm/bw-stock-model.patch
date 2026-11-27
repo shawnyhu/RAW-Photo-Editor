@@ -1002,7 +1002,7 @@
      addComputePass("spektrafilm_grain_micro_blur_y");
 --- a/tools/generate_profile_curves.py
 +++ b/tools/generate_profile_curves.py
-@@ -387,7 +387,28 @@
+@@ -387,7 +387,41 @@
  
  
  def _load_profile(stock: str) -> dict:
@@ -1021,9 +1021,22 @@
 +        raise ValueError(f"{stock}: B&W reference time is not in the source family")
 +    data["selected_development_time"] = times[index]
 +    data["log_sensitivity"] = [[row[0]] * 3 for row in data["log_sensitivity"]]
-+    data["density_curves"] = [[row[index]] * 3 for row in data["density_curves"]]
-+    data["density_curves_layers"] = [
-+        [[layer[index]] * 3 for layer in row] for row in data["density_curves_layers"]]
++    # Negs regenerates these caches on load. Several distributed B&W JSONs
++    # contain older cached total/layer arrays, which must not be mixed.
++    model = data["density_curves_model"]
++    if model["model_type"] not in ("cdfs", "norm_cdfs"):
++        raise ValueError(f"{stock}: unsupported B&W development curve model")
++    centers = np.asarray(model["centers"][index], dtype=float)
++    amplitudes = np.asarray(model["amplitudes"][index], dtype=float)
++    sigmas = np.asarray(model["sigmas"][index], dtype=float)
++    if (not np.isfinite([centers, amplitudes, sigmas]).all()
++            or np.any(sigmas <= 0.0)):
++        raise ValueError(f"{stock}: invalid B&W development curve model")
++    sign = -1.0 if profile["info"]["type"] == "positive" else 1.0
++    z = sign * (np.asarray(data["log_exposure"])[:, None] - centers[None, :]) / sigmas[None, :]
++    layers = amplitudes[None, :] * scipy.special.ndtr(z)
++    data["density_curves"] = np.repeat(layers.sum(axis=1)[:, None], 3, axis=1).tolist()
++    data["density_curves_layers"] = np.repeat(layers[:, :, None], 3, axis=2).tolist()
 +    data["base_density"] = [row[index] for row in data["base_density"]]
 +    # One silver channel: dot(density, [silver, 0, 0]) = density[0] * silver.
 +    # Repeating silver into all three slots would triple optical density.
@@ -1032,7 +1045,7 @@
  
  
  def _load_archive_profile(stock: str) -> dict | None:
-@@ -964,10 +985,14 @@
+@@ -964,10 +998,14 @@
  
  
  def _halation_preset(info: dict) -> dict[str, tuple[float, float, float]]:
@@ -1048,7 +1061,7 @@
  
  
  def _dir_coupler_defaults(info: dict) -> dict[str, tuple[float, ...]]:
-@@ -1033,6 +1058,19 @@
+@@ -1033,6 +1071,19 @@
          density_curve_minimum = _density_curve_minimum(profile)
          density_curve_layers = _numeric_layers(profile, "density_curves_layers")
          density_curve_layer_maxima = _density_curve_layer_maxima(profile)
@@ -1068,7 +1081,7 @@
          halation_preset = _halation_preset(info)
          dir_couplers = _dir_coupler_defaults(info)
          channel_density = _numeric_matrix(profile, "channel_density")
-@@ -1094,7 +1132,8 @@
+@@ -1094,7 +1145,8 @@
              f"{prefix}_dir_gamma_g_to_rb, "
              f"{prefix}_dir_gamma_b_to_rg, "
              f"{prefix}_scan_illuminant, "

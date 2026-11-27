@@ -11,15 +11,6 @@ import unicodedata
 from uuid import uuid4
 
 
-_BUILTIN_DIR = Path(__file__).parent / "assets" / "film_presets"
-BUILTIN_PRESETS = {
-    "fuji-pro-400h": "FUJI Pro 400H",
-    "fuji-provia-100f": "FUJI Provia100f",
-    "kodak-ektar-100": "KODAK Ektar 100",
-    "kodak-portra-800": "KODAK Portra 800",
-}
-
-
 def _directory():
     if sys.platform == "win32":
         roaming = os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming"
@@ -42,8 +33,6 @@ def _name(value):
 
 
 def _path(preset_id):
-    if isinstance(preset_id, str) and preset_id in BUILTIN_PRESETS:
-        raise ValueError("Built-in presets are read-only")
     if not isinstance(preset_id, str) or not re.fullmatch("[0-9a-f]{32}", preset_id):
         raise ValueError("Invalid preset ID")
     return _directory() / (preset_id + ".json")
@@ -118,8 +107,6 @@ def save(name, settings):
 
 
 def load(preset_id):
-    if isinstance(preset_id, str) and preset_id in BUILTIN_PRESETS:
-        return _read(_BUILTIN_DIR / (preset_id + ".json"))[1]
     return _read(_path(preset_id))[1]
 
 

@@ -117,3 +117,17 @@ Apple Silicon 取自[最终构建](https://github.com/shawnyhu/RAW-Photo-Editor/
 首次受限进程无法访问 Metal 的失败日志已由 Mac 端保留；最终通过结果来自用户启动的桌面会话。两张窗口截图内容相同，不能充当前后视觉变化对照；点击行为的证据为真实窗口事件及节点数值断言。
 
 本条依据用户回传报告摘要记录。当前 Windows 会话未能读取用户 ChatGPT Library 中的原始验收归档，尚未独立复核该归档的日志、基准与截图；上述 Mac 结果不计作 Windows 端重跑或 CI 结果。当前验收覆盖 Windows RTX 4090/Vulkan 与该 Apple M1/Metal 两套环境。保留已验收安装包和原生库字节及原标签，在原预发布页补充 Mac 报告，不重新构建安装包。
+
+## 2026-11-27 · Film 推荐设置、黑白材料与品牌菜单（1.0.2-beta.6）
+
+用户希望选择 Film 后直接得到配套起点，并把 Presets 留作个人创作效果。新增的选择逻辑按全部 64 款胶片的来源数据载入推荐 Print 或反转直扫、显影/DIR 校准、颗粒和光晕参数，清除上一种胶片的隐藏覆盖；扩散与扫描器回到通用中性值。颗粒、光晕、扩散、扫描器初始关闭。用户可启用效果并保存个人预设。推荐值是来源支持的起点，不能保证每张照片的主观最佳观感。
+
+`film_node.apply_stock_defaults` 仅在新建、显式选择或 Restore Film Defaults 时执行，完整个人预设导入使用回调抑制；打开旧文件不触发推荐重置。目标卡片的 Live Preview 和上游 RAW 调整保持。四份系统内置效果预设已移除，用户自行保存的同名副本及旧节点参数保留。Lite 的 DIR 控件和专用重置入口已隐藏/移除，旧 RNA 字段仍用于持久化既有作品。
+
+`film_stock_ui.py` 为 Film/Print 提供按品牌分列的弹出菜单、可读型号、类别和当前勾选。菜单操作显式携带节点树及节点名，不依赖当前活动卡片。Print 只列出受支持的配对，Full Film Sim 在 Python 与原生桥均拒绝混用彩色/银盐材料；Print only 接收已有底片输入。
+
+新增 Double-X 5222、Tri-X Reversal 7266、HP5 Plus、FP4 Plus、Delta 3200、T-Max 100、Acros II、Tri-X 400 / D-76，以及 Kodak 2302 和 Ilford MGRC Deluxe grade 2。数据均随包离线分发。后两种实验数据的来源说明、许可证和测量/拟合限制保留。单通道感光与银盐密度通过现有三槽布局表示，DIR 不引入跨染料耦合，黑白颗粒只使用一个通道。所有四个拟合层都参与颗粒；第四层使用来源提供的最细粒子尺度。源模型的拟合组件不等于实测物理乳剂层。
+
+开发中发现 Negs 的黑白 JSON 缓存曲线与其 norm-CDF 参数模型存在差异。按上游加载过程重建参考显影时间的曲线和全部拟合层，再生成颗粒校准。彩色资料、旧索引和旧计算路径保持原值。详细来源及实验限制见 vendor/spektrafilm/NOTICE.md、CHANGELOG.txt 和 additional-stock-data.tar.gz。
+
+先在已验收 beta.5 的独立配置录制 RTX 4090 上 672 组彩色配方及 60 个旧节点，基准 SHA-256 为 `1525a58ef77a52c67a09d7946e7c0da9a691ee8610ceeaf23c6a5fe16d2cdfc8`，未覆盖 beta.4 的 160 组基准。首轮新原生库与这 672 组像素完全一致，60 个节点保存值不变；这是开发阶段结果。最终包的验收结果将在构建完成后追加。Mac beta.5 的通过结果不自动延伸到本版；本版需依据 [Mac 验收交接](spektrafilm-beta6-mac-handoff.md)重测。

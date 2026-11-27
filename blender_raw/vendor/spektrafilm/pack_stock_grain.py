@@ -12,6 +12,7 @@ import tarfile
 import tomllib
 
 import numpy as np
+from scipy.special import ndtr
 
 from pack_stock_data import DYEFILMS, NEGS_REVISION, reference_time
 
@@ -39,7 +40,18 @@ def calibration_for(profile, presets):
     layers = np.asarray(profile["data"]["density_curves_layers"], dtype=float)
     if info["channel_model"] == "bw":
         index = profile["data"]["development_time"].index(reference_time(profile))
-        layers = layers[:, :, index:index + 1]
+        # Negs load_profile refreshes the cached BW curves from their fitted
+        # model. Its grain calibration must use the same authoritative layers
+        # as native rendering; some shipped JSON caches differ substantially.
+        model = profile["data"]["density_curves_model"]
+        if model["model_type"] != "norm_cdfs":
+            raise ValueError(f"Unsupported B&W curve model for {info['stock']}")
+        exposure = np.asarray(profile["data"]["log_exposure"], dtype=float)[:, None]
+        centers = np.asarray(model["centers"][index], dtype=float)
+        amplitudes = np.asarray(model["amplitudes"][index], dtype=float)
+        sigmas = np.asarray(model["sigmas"][index], dtype=float)
+        sign = -1.0 if info["type"] == "positive" else 1.0
+        layers = (amplitudes * ndtr(sign * (exposure - centers) / sigmas))[:, :, None]
     maxima = np.nanmax(layers, axis=0)
     fractions = maxima / maxima.sum(axis=0)
     floor = fractions * grain["density_min"]
@@ -131,6 +143,8 @@ def recommended_defaults(profiles, catalog, presets, areas, legacy):
         item["provenance"]["grain_rms_at_48um"] = rgb(grain["rms_granularity"])
         item["provenance"]["grain_calibration"] = ("Source preset RMS inverted over the reference-time density sublayers; "
             "fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components.")
+        if info["channel_model"] == "bw":
+            item["provenance"]["grain_calibration"] += " B&W layers are refreshed from the authoritative norm-CDF model, matching Negs load_profile."
         if stock not in presets and not info.get("custom_look", {}).get("grain"):
             item["provenance"]["grain_calibration"] = "Upstream generic schema default; no stock-specific RMS preset is available."
         films[stock] = item

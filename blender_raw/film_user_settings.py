@@ -57,6 +57,7 @@ def _validated_values(settings):
                 raise ValueError(f"Unknown {key} option {value!r}")
             value = _CHOICES[key].index(value)
         engine.validate_parameter(_NATIVE_KEYS.get(key, key), value)
+    engine.validate_stock_pair(controls["film"], controls["paper"], PROCESS_MODES.index(controls["process"]))
 
     parameters = settings.get("parameters")
     if not isinstance(parameters, dict) or _EXCLUDED_NATIVE.intersection(parameters):

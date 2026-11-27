@@ -77,6 +77,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - name: Build and verify signed arm64 Lite engine
         shell: bash
         run: |
@@ -86,6 +89,7 @@ jobs:
           "$RUNNER_TEMP/lite-python/bin/python" -m pip install numpy==2.5.5 scipy==1.18.1 colour-science==0.4.7
           "$RUNNER_TEMP/lite-python/bin/python" blender_raw/vendor/spektrafilm/build_macos.py
           vendor=blender_raw/vendor/spektrafilm
+          xcrun --sdk macosx metal -std=metal3.0 -c "$vendor/SpektraFilm.metal" -o "$RUNNER_TEMP/lite-film.air"
           file "$vendor/libphoto_film.dylib"
           codesign --verify --strict --verbose=2 "$vendor/libphoto_film.dylib"
           lipo "$vendor/libphoto_film.dylib" -verify_arch arm64

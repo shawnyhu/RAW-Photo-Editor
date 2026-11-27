@@ -220,11 +220,11 @@
           0.01,
           0.01
         ],
-        "grainParticleAreaUm2": 0.0958165190699813,
+        "grainParticleAreaUm2": 0.09581652021654301,
         "grainParticleScale": [
-          1.0000000000000002,
-          1.0000000000000002,
-          1.0000000000000002
+          1.0,
+          1.0,
+          1.0
         ],
         "grainParticleScaleLayers": [
           1.0,
@@ -245,7 +245,7 @@
       "provenance": {
         "copyright": "Copyright 2026 MUAStudio Inc. (Fotufilm, https://fotufilm.com). Converted for Negs by Noah Haasis.",
         "datasource": "Fotufilm runtime film profile by MUAStudio Inc.; released under CC BY-SA 4.0. Sampled characteristic curves preserve digitized Fujifilm AF3-0258E density records with C1 interpolation. The first and last 12 points of each record provide monotonic extrapolation outside the published range. Runtime rendering data only. See licenses/FILM-PROFILES.txt. Development: FUJIFILM NEOPAN 100 ACROS II data sheet AF3-0258E p3; D-76, 20 C, small tank. Reference time 7 min from the manufacturer datasheet; its curve was checked against that datasheet's graph (Fujifilm AF3-0259E (120 edition), p3, D-76 4/7/10 min: within 0.06 D, line-trace precision).",
-        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components.",
+        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components. B&W layers are refreshed from the authoritative norm-CDF model, matching Negs load_profile.",
         "grain_rms_at_48um": [
           7.0,
           7.0,
@@ -2078,7 +2078,7 @@
           0.01,
           0.01
         ],
-        "grainParticleAreaUm2": 1.1076377151751486,
+        "grainParticleAreaUm2": 1.1076385676276947,
         "grainParticleScale": [
           1.0,
           1.0,
@@ -2103,7 +2103,7 @@
       "provenance": {
         "copyright": "Copyright 2026 MUAStudio Inc. (Fotufilm, https://fotufilm.com). Converted for Negs by Noah Haasis.",
         "datasource": "Fotufilm runtime film profile by MUAStudio Inc.; released under CC BY-SA 4.0. Sampled characteristic curves preserve digitized Ilford Delta 3200 TI (2002), DD-X 9-minute vector trace density records with C1 interpolation. The first and last 12 points of each record provide monotonic extrapolation outside the published range. Runtime rendering data only. See licenses/FILM-PROFILES.txt. Edge inscriptions and approximate physical placement follow the manufacturer documents and developed-film photographs in edgePrinting.sources; see docs/print-frame-model.md. The DX edge barcode encodes the DX number cited in edgePrinting.dx.source. Development: ILFORD DELTA 3200 Professional fact sheet, September 2002 p6; ILFORD ILFOTEC DD-X, 1+4, 20 C, intermittent agitation in a spiral or deep tank. Reference time 9 min from the manufacturer datasheet; its curve was checked against that datasheet's graph (ILFORD Delta 3200 fact sheet, German edition, October 2002, p7, DD-X 1+4 7/9/12/16 min: all four curves overlay).",
-        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components.",
+        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components. B&W layers are refreshed from the authoritative norm-CDF model, matching Negs load_profile.",
         "grain_rms_at_48um": [
           19.0,
           19.0,
@@ -2144,7 +2144,7 @@
           0.01,
           0.01
         ],
-        "grainParticleAreaUm2": 0.3507912512931986,
+        "grainParticleAreaUm2": 0.35079125245654214,
         "grainParticleScale": [
           1.0,
           1.0,
@@ -2169,7 +2169,7 @@
       "provenance": {
         "copyright": "Copyright 2026 MUAStudio Inc. (Fotufilm, https://fotufilm.com). Converted for Negs by Noah Haasis.",
         "datasource": "Fotufilm runtime film profile by MUAStudio Inc.; released under CC BY-SA 4.0. Contains rendering parameters and spectral samples only. See licenses/FILM-PROFILES.txt. Sheet-notch metadata follows Ilford Notch Codes Guide; see sheetNotches.source. Edge inscriptions and approximate physical placement follow the manufacturer documents and developed-film photographs in edgePrinting.sources; see docs/print-frame-model.md. The DX edge barcode encodes the DX number cited in edgePrinting.dx.source. Development: ILFORD FP4 PLUS Technical Information (Nov 2018) p3; ILFORD ILFOTEC HC 1+31, 20 C, intermittent agitation. Reference time 8 min from the manufacturer datasheet; its curve was checked against that datasheet's graph (ILFORD FP4 Plus fact sheet, July 2010, p4, ILFOTEC HC 1+31 8 min: max 0.009 D). Development times 6, 9 min are Fotufilm estimates (its process-level rule applied to this film's curve), not manufacturer curves.",
-        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components.",
+        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components. B&W layers are refreshed from the authoritative norm-CDF model, matching Negs load_profile.",
         "grain_rms_at_48um": [
           10.0,
           10.0,
@@ -2210,7 +2210,7 @@
           0.01,
           0.01
         ],
-        "grainParticleAreaUm2": 0.3801534399652983,
+        "grainParticleAreaUm2": 0.3801536702905232,
         "grainParticleScale": [
           1.0,
           1.0,
@@ -2235,7 +2235,7 @@
       "provenance": {
         "copyright": "Copyright 2026 MUAStudio Inc. (Fotufilm, https://fotufilm.com). Converted for Negs by Noah Haasis.",
         "datasource": "Fotufilm runtime film profile by MUAStudio Inc.; released under CC BY-SA 4.0. Sampled characteristic curves preserve digitized Ilford HP5 Plus TI (Nov 2018) density records with C1 interpolation. The first and last 12 points of each record provide monotonic extrapolation outside the published range. Runtime rendering data only. See licenses/FILM-PROFILES.txt. Edge inscriptions and approximate physical placement follow the manufacturer references in edgePrinting.sources; see docs/print-frame-model.md. Sheet-notch metadata follows Ilford Notch Codes Guide; see sheetNotches.source. The DX edge barcode encodes the DX number cited in edgePrinting.dx.source. Development: ILFORD HP5 PLUS Technical Information (Nov 2018) p3; ILFORD ILFOTEC HC 1+31, 20 C, intermittent agitation. Reference time 6.5 min from the manufacturer datasheet; its curve was checked against that datasheet's graph (ILFORD HP5 Plus fact sheet, April 2010, p5, ILFOTEC HC 1+31 6.5 min: max 0.016 D). Development times 9.5, 14 min are Fotufilm estimates (its process-level rule applied to this film's curve), not manufacturer curves.",
-        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components.",
+        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components. B&W layers are refreshed from the authoritative norm-CDF model, matching Negs load_profile.",
         "grain_rms_at_48um": [
           16.0,
           16.0,
@@ -2340,7 +2340,7 @@
           0.01,
           0.01
         ],
-        "grainParticleAreaUm2": 0.5943140653966453,
+        "grainParticleAreaUm2": 0.5943140154332521,
         "grainParticleScale": [
           1.0,
           1.0,
@@ -2365,7 +2365,7 @@
       "provenance": {
         "copyright": "Copyright (c) 2026 Andrea Volpato. Licensed under CC BY-SA 4.0.",
         "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
-        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components.",
+        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components. B&W layers are refreshed from the authoritative norm-CDF model, matching Negs load_profile.",
         "grain_rms_at_48um": [
           14.0,
           14.0,
@@ -3239,7 +3239,7 @@
           0.01,
           0.01
         ],
-        "grainParticleAreaUm2": 0.15876842649134265,
+        "grainParticleAreaUm2": 0.15876845847927018,
         "grainParticleScale": [
           1.0,
           1.0,
@@ -3264,7 +3264,7 @@
       "provenance": {
         "copyright": "Copyright 2026 MUAStudio Inc. (Fotufilm, https://fotufilm.com). Converted for Negs by Noah Haasis.",
         "datasource": "Fotufilm runtime film profile by MUAStudio Inc.; released under CC BY-SA 4.0. Contains rendering parameters and spectral samples only. See licenses/FILM-PROFILES.txt. Edge inscriptions and approximate physical placement follow the manufacturer references in edgePrinting.sources; see docs/print-frame-model.md. Development: KODAK PROFESSIONAL T-MAX 100 Film F-4016 (curve times legible in the 2018 edition) p8; KODAK Developer D-76, 20 C, small tank, agitation at 30-second intervals. Reference time 6 min from the manufacturer datasheet; its curve was checked against that datasheet's graph (Kodak F-4016, p8, D-76 small tank 6/7.5 min: max 0.02 D).",
-        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components.",
+        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components. B&W layers are refreshed from the authoritative norm-CDF model, matching Negs load_profile.",
         "grain_rms_at_48um": [
           8.0,
           8.0,
@@ -3305,7 +3305,7 @@
           0.003,
           0.003
         ],
-        "grainParticleAreaUm2": 2.645036071698737,
+        "grainParticleAreaUm2": 2.645003534270971,
         "grainParticleScale": [
           1.0,
           1.0,
@@ -3330,7 +3330,7 @@
       "provenance": {
         "copyright": "Copyright (c) 2026 Andrea Volpato. Licensed under CC BY-SA 4.0.",
         "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
-        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components.",
+        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components. B&W layers are refreshed from the authoritative norm-CDF model, matching Negs load_profile.",
         "grain_rms_at_48um": [
           44.0,
           44.0,
@@ -3371,7 +3371,7 @@
           0.01,
           0.01
         ],
-        "grainParticleAreaUm2": 0.5080850758715911,
+        "grainParticleAreaUm2": 0.5080850758715957,
         "grainParticleScale": [
           1.0,
           1.0,
@@ -3396,7 +3396,7 @@
       "provenance": {
         "copyright": "New preparation: spektrafilm-rs contributors (Codex-assisted), 2026. Manufacturer source rights retained.",
         "datasource": "Kodak F-4017, October 2021; https://kodakprofessional.com/sites/default/files/wysiwyg/film/f4017_trix_320400.pdf; SHA256 1d86b030cf7a8502e6f1414c630fa2cda30b68df53f49bccccce73c9c6562078. Reproduce with scripts/bw_expansion/prepare.py; source points, assumptions and conditions: data/profile-sources/bw-expansion/recipe.json. PCHIP of the labelled solid log-sensitivity trace; engine covers 380-780 nm. Truncate beyond 665 nm because the plot reaches its lower limit near 668 nm. This is an explicit unmeasured-tail approximation, not proof of zero red sensitivity.",
-        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components.",
+        "grain_calibration": "Source preset RMS inverted over the reference-time density sublayers; fourth sublayer repeats the finest scale. Profile sublayers may be mathematical fit components. B&W layers are refreshed from the authoritative norm-CDF model, matching Negs load_profile.",
         "grain_rms_at_48um": [
           17.0,
           17.0,

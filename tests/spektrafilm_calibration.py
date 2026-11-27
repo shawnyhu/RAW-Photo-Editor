@@ -51,6 +51,22 @@ def noncalibration_recipe(node):
     return recipe
 
 
+def assert_recommendation(node, stock):
+    record = engine.stock_defaults(stock)
+    recipe = film_node.recipe(node)
+    assert node.preset_film == stock and node.use_stock_calibration
+    assert node.paper == (record["target_print"] or "")
+    assert node.process == MODES[1 if record["type"] == "positive" else 0]
+    assert not node.scanNegativeInvert and not node.grain and not node.halation
+    assert node.grain_model == "Preview" and not node.preset_name
+    for key, effect in film_effects.BY_KEY.items():
+        expected = record["parameters"].get(key, effect.default)
+        np.testing.assert_allclose(recipe["effects"][key], expected, rtol=0, atol=1e-6, err_msg=key)
+    for key, expected in record["parameters"].items():
+        values = recipe["effects"] if key in recipe["effects"] else recipe["parameters"]
+        np.testing.assert_allclose(values[key], expected, rtol=0, atol=1e-6, err_msg=key)
+
+
 def preset_path(folder):
     repo = Path(__file__).resolve().parents[1]
     for root in (repo, repo.parent.parent):
@@ -98,17 +114,19 @@ def check_node(folder):
     original_json = node.preset_parameters
     artistic = noncalibration_recipe(node)
 
-    # Reproduce the user flow. Film selection must update its calibration and
-    # normal photo workflow without erasing unrelated preset look settings.
+    # Explicit Film selection loads the complete recommendation, replacing the
+    # previous look's print, effects and hidden native overrides together.
     node.film = VELVIA
     assert node.process == MODES[1] and not node.scanNegativeInvert
-    assert node.preset_film == PORTRA and node.preset_parameters == original_json
+    assert node.preset_parameters != original_json
     assert_calibration(node, engine.dir_defaults(VELVIA))
-    assert noncalibration_recipe(node) == artistic
+    assert_recommendation(node, VELVIA)
+    assert noncalibration_recipe(node) != artistic
     fixed_recipe = film_node.recipe(node)
     node.film = PORTRA
     assert node.process == MODES[0]
     assert_calibration(node, NEGATIVE)
+    assert_recommendation(node, PORTRA)
     node.film = VELVIA
 
     # Component edits are especially important with get_transform: untouched
@@ -132,12 +150,14 @@ def check_node(folder):
     node.dirGammaBToRg = (0.02, 0.03)
     node.film = PROVIA
     assert_calibration(node, engine.dir_defaults(PROVIA))
-    assert not any(node.is_property_set(key) for key in MATRICES)
-    assert noncalibration_recipe(node) == before_reset
+    assert all(node.is_property_set(key) for key in MATRICES)
+    assert_recommendation(node, PROVIA)
+    assert noncalibration_recipe(node) != before_reset
     node.process = MODES[2]
     node.scanNegativeInvert = True
     node.film = PORTRA
-    assert node.process == MODES[2] and node.scanNegativeInvert
+    assert node.process == MODES[0] and not node.scanNegativeInvert
+    assert_recommendation(node, PORTRA)
 
     # A real slide preset may intentionally customize just one matrix group.
     custom_path = folder / "custom-slide.sfpreset"
@@ -151,11 +171,17 @@ def check_node(folder):
     node.film = PROVIA
     assert_calibration(node, engine.dir_defaults(PROVIA))
     node.film = VELVIA
+    assert_calibration(node, engine.dir_defaults(VELVIA))
+    assert_recommendation(node, VELVIA)
+    film_node.load_preset(node, custom_path)
     assert_calibration(node, custom_values)
 
     # Saved 0.20.1 nodes have no provenance. Recognize a complete known factory
     # matrix, but do not silently discard an unknown legacy custom calibration.
     node.property_unset("preset_film")
+    node.use_stock_calibration = False
+    for key in MATRICES:
+        node.property_unset(key)
     node.preset_parameters = json.dumps(NEGATIVE)
     assert_calibration(node, engine.dir_defaults(VELVIA))
     custom_legacy = {**NEGATIVE, "dirGammaRToGb": (0.15, 0.08)}
@@ -197,7 +223,8 @@ def check_node(folder):
     assert not copied.use_stock_calibration and copied.preset_film == engine.default_film()
     assert_calibration(copied, engine.dir_defaults(engine.default_film()))
     film_node.reset_recipe(copied)
-    assert not copied.preset_film and not copied.preset_parameters and not copied.use_stock_calibration
+    assert copied.film == engine.default_film()
+    assert_recommendation(copied, engine.default_film())
     assert_calibration(copied, engine.dir_defaults(engine.default_film()))
     print("PASS stock calibration, actual preset switch, component edits, mode, legacy repair, copy/reset/persistence", flush=True)
     return fixed_recipe
@@ -207,7 +234,7 @@ def check_render(recipe):
     levels = np.array([0.01, 0.04, 0.18, 0.5, 0.9], dtype=np.float32)
     chart = np.broadcast_to(np.repeat(levels, 64)[None, :, None], (64, 320, 3)).copy()
     # Isolate stock calibration from stochastic grains and spatial optics while
-    # retaining the actual preset's hidden spectral and development parameters.
+    # retaining the selected stock's hidden spectral and development parameters.
     recipe = {**recipe, "grain": False, "halation": False, "effects": {
         **recipe["effects"], "cameraDiffusionEnabled": False,
         "printDiffusionEnabled": False, "scannerEnabled": False}}

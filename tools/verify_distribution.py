@@ -15,14 +15,13 @@ ROOT_FILES = {
     "README.md", "CHANGELOG.md", "LICENSE", ".gitignore", ".gitattributes", "AGENTS.md",
     "docs/workflow.md", "docs/development.md", "docs/development-log.md",
     "docs/spektrafilm-beta5-mac-handoff.md",
+    "docs/spektrafilm-beta6-mac-handoff.md",
 }
 STOCK_FILES = {
     "additional-stock-data.tar.gz", "pack_stock_data.py", "pack_stock_grain.py",
     "stock_grain.toml", "stock_grain_areas.json", "stock-tables.patch",
+    "stock_defaults.json", "bw-stock-model.patch",
     "dyeworks-eterna-print-filters.json", "NOTICE.md", "CHANGELOG.txt",
-}
-BUILTIN_PRESETS = {
-    "fuji-pro-400h.json", "fuji-provia-100f.json", "kodak-ektar-100.json", "kodak-portra-800.json",
 }
 STOCK_NOTICES = {
     "Legal/Negs/FOTUFILM_LICENSE.txt", "Legal/Negs/SPEKTRAFILM_LICENSE.txt",
@@ -69,8 +68,8 @@ def build(artifact, source):
         assert "quickPresetSelection" not in {p["name"] for p in schema["parameters"]}
         assert "10.25039/CIE.DS.xvudnb9b" in package.read("vendor/spektrafilm/NOTICE.md").decode()
         required = {"vendor/spektrafilm/" + name for name in STOCK_FILES}
-        required.update("assets/film_presets/" + name for name in BUILTIN_PRESETS)
-        assert required <= paths, "Missing bundled stock/preset sources: " + str(sorted(required - paths))
+        assert required <= paths, "Missing bundled stock sources: " + str(sorted(required - paths))
+        assert not any(name.startswith("assets/film_presets/") for name in paths), "Retired built-in presets must not ship"
         with tarfile.open(fileobj=io.BytesIO(package.read("vendor/spektrafilm/additional-stock-data.tar.gz"))) as stocks:
             assert STOCK_NOTICES <= set(stocks.getnames()), "Missing stock license or attribution"
             assert all(stocks.extractfile(name).read().strip() for name in STOCK_NOTICES)
@@ -87,7 +86,8 @@ def build(artifact, source):
     files = subprocess.check_output(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=ROOT
     ).decode().split("\0")
-    selected = {p for p in files if p in ROOT_FILES or p.startswith(("blender_raw/", "tools/", "tests/", ".github/workflows/"))}
+    selected = {p for p in files if (ROOT / p).is_file() and
+                (p in ROOT_FILES or p.startswith(("blender_raw/", "tools/", "tests/", ".github/workflows/")))}
     selected.add("blender_raw/" + wheel)
     with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_DEFLATED) as output:
         for path in sorted(selected):

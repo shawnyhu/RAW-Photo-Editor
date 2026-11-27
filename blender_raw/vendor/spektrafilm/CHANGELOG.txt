@@ -17,6 +17,9 @@ its floor-middle family entry: Double-X 6.5 min, Tri-X Reversal 1, HP5 6.5,
 FP4 8, Delta 3200 9, T-Max 100 6, Acros II 7, Tri-X 400 8; 2302 5 and Ilford
 grade 2 1. Tri-X Reversal's single family value is retained as source metadata;
 it does not claim a one-minute complete real-world reversal process.
+Some B&W JSON curve caches differ from their authoritative fitted models.
+Following Negs load_profile, runtime and grain-area calibration regenerate
+the normal-CDF layers and their summed density at the reference time.
 The runtime selects a single source time, retains all curve/grain components,
 and maps the single silver-density channel to the native three-lane layout.
 Inter-colour DIR terms are zero. The fourth grain component repeats the finest

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Exercise the persistent preset library with Python or Blender's bundled Python."""
 import os
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -47,19 +48,24 @@ class PresetLibraryTests(unittest.TestCase):
             library.delete("../outside")
         self.assertEqual(library.list_presets(), [(first, "Café"), (second, "Other")])
 
-    def test_builtin_presets_and_same_named_user_copy(self):
-        self.assertEqual(len(library.BUILTIN_PRESETS), 4)
-        for key, name in library.BUILTIN_PRESETS.items():
-            settings = library.load(key)
-            user_id = library.save(name, {"film": "custom"})
-            self.assertEqual(library.load(user_id), {"film": "custom"})
-            with self.assertRaisesRegex(ValueError, "read-only"):
-                library.rename(key, "Renamed")
-            with self.assertRaisesRegex(ValueError, "read-only"):
-                library.delete(key)
-            library.delete(user_id)
-            self.assertEqual(library.load(key), settings)
-        self.assertFalse(library.list_presets())
+    def test_existing_personal_presets_keep_former_builtin_names(self):
+        names = ("FUJI Pro 400H", "FUJI Provia100f", "KODAK Ektar 100", "KODAK Portra 800")
+        settings = {"film": "kodak_portra_800", "grainAmount": .375}
+        self.root.mkdir()
+        # Files created by earlier versions keep their IDs and remain editable.
+        for index, name in enumerate(names):
+            preset_id = f"{index:032x}"
+            (self.root / (preset_id + ".json")).write_text(
+                json.dumps({"version": 1, "name": name, "settings": settings}), encoding="utf-8")
+        self.assertEqual({name for _, name in library.list_presets()}, set(names))
+        for preset_id, name in library.list_presets():
+            self.assertEqual(library.load(preset_id), settings)
+            library.rename(preset_id, name + " personal")
+            self.assertEqual(library.load(preset_id), settings)
+            library.delete(preset_id)
+        self.assertEqual(library.list_presets(), [])
+        with self.assertRaisesRegex(ValueError, "Invalid preset ID"):
+            library.load("fuji-pro-400h")
 
     def test_failed_replacement_preserves_committed_file(self):
         first = library.save("Original", {"grain": True})

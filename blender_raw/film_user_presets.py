@@ -115,11 +115,6 @@ class BR_PT_spektrafilm_presets(bpy.types.Panel):
             for action, icon in ((BR_OT_rename_film_preset, "GREASEPENCIL"), (BR_OT_delete_film_preset, "X")):
                 op = row.operator(action.bl_idname, text="", icon=icon)
                 op.preset_id, op.preset_name = preset_id, name
-        layout.separator()
-        layout.label(text="Built-in Presets")
-        for preset_id, name in film_user_library.BUILTIN_PRESETS.items():
-            op = film_node._action(layout, BR_OT_apply_film_preset.bl_idname, node, name, "PRESET")
-            op.preset_id = preset_id
 
 
 _CLASSES = (BR_OT_save_film_preset, BR_OT_apply_film_preset, BR_OT_rename_film_preset,

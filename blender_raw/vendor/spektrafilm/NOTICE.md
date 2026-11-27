@@ -67,7 +67,10 @@ colour/B&W matrix entries are rejected by the application.
 `stock_defaults.json` supplies recommendations for all 64 film choices and
 compatibility metadata for all 14 prints. Source normal development times are
 used when supplied; other B&W families use the floor-middle entry, matching
-Negs. Single-channel optical density is preserved, with no invented RGB dye
+Negs. Some source JSON curve caches differ from their fitted models; following
+Negs' `load_profile`, the B&W runtime and grain calibration refresh the layers
+and total density from the authoritative normal-CDF model at the selected time.
+Single-channel optical density is preserved, with no invented RGB dye
 layers. Four-component characteristic-curve and grain models retain all four
 components; the fourth grain component uses the finest supplied particle scale.
 These fitted components are not measurements of physical emulsion layers.

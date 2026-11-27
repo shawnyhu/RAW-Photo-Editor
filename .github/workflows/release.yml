@@ -67,6 +67,7 @@ jobs:
           python3 tests/film_user_library.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_settings.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_added_calibration.py
+          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_stock_defaults.py
           for stage in write use; do
             "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_preset_flow.py -- "$stage" "$RUNNER_TEMP/film-user-presets"
           done
@@ -81,21 +82,24 @@ jobs:
           "$BLENDER" -b --factory-startup --offline-mode --python-exit-code 1 --python tests/crop_detection_confidence.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/crop_axis_geometry.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/crop_perspective.py
-      - name: Compare original film and print pairs with the previous Metal renderer
+      - name: Compare all beta.5 color recipes with the previous Metal renderer
         run: |
           set -euo pipefail
-          previous="$RUNNER_TEMP/raw_photo_editor-1.0.2-beta.4.zip"
+          previous="$RUNNER_TEMP/raw_photo_editor-1.0.2-beta.5.zip"
           curl --fail --silent --show-error --location --retry 3 -o "$previous" \
-            https://github.com/shawnyhu/RAW-Photo-Editor/releases/download/v1.0.2-beta.4/raw_photo_editor-1.0.2-beta.4.zip
-          printf '%s  %s\n' d7704cb93d17570b729f85c927fdf5bf5effa76b28d6f0b6252d3ea654eec55f "$previous" | shasum -a 256 -c -
+            https://github.com/shawnyhu/RAW-Photo-Editor/releases/download/v1.0.2-beta.5/raw_photo_editor-1.0.2-beta.5.zip
+          printf '%s  %s\n' 178331fa74af838e1eda53d1c8f8896cd957a8ac97afe7f7295472aaee5e309d "$previous" | shasum -a 256 -c -
           profile="$RUNNER_TEMP/previous-film-profile"
           baseline="$RUNNER_TEMP/previous-film-pixels.npz"
           mkdir -p "$profile"
           BLENDER_USER_RESOURCES="$profile" "$BLENDER" -b --factory-startup --offline-mode --command extension install-file --repo user_default --enable "$previous"
-          BLENDER_USER_RESOURCES="$profile" "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_stock_pixels.py -- record-if-available "$baseline"
+          BLENDER_USER_RESOURCES="$profile" "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_color_compatibility.py -- record-if-available "$baseline"
           if [[ -f "$baseline" ]]; then
-            "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_stock_pixels.py -- compare "$baseline"
+            "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_color_compatibility.py -- compare "$baseline"
             "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_added_calibration.py -- --pixels
+            "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_stock_defaults.py -- --pixels
+          else
+            echo 'SKIP actual Metal acceptance: runner has no usable GPU; requires a physical Mac.'
           fi
       - name: Drag crop and perspective handles in a Blender window
         shell: bash
@@ -173,6 +177,8 @@ jobs:
           & $blender -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_settings.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           & $blender -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_added_calibration.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $blender -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_stock_defaults.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           foreach ($stage in 'write', 'use') {
             & $blender -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_preset_flow.py -- $stage "$env:RUNNER_TEMP/film-user-presets"
