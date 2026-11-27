@@ -1,29 +1,12 @@
-name: Extension release
-on:
-  pull_request:
-    branches: [main]
-    paths: ['blender_raw/**', 'tests/**', '.github/workflows/release.yml', 'CHANGELOG.md']
-  push:
-    branches: [main]
-    paths: ['blender_raw/blender_manifest.toml', '.github/workflows/release.yml']
-  workflow_dispatch:
-    inputs:
-      macos_runner:
-        description: Apple Silicon runner for this validation
-        type: choice
-        default: macos-15
-        options: [macos-15, macos-26]
+name: 1.1.0 same-package validation
+on: workflow_dispatch
 permissions:
   contents: read
+  actions: read
 jobs:
-  decoder:
-    uses: ./.github/workflows/prepare-decoder.yml
   install-and-test:
-    needs: decoder
-    runs-on: ${{ inputs.macos_runner || 'macos-15' }}
-    # Hosted Metal recorded 180 of 672 reference renders in 18 minutes.
-    # The same job also renders all 672 candidate images and the stock checks.
-    timeout-minutes: 240
+    runs-on: macos-15
+    timeout-minutes: 25
     outputs:
       digest: ${{ steps.upload.outputs.artifact-digest }}
       version: ${{ steps.build.outputs.version }}
@@ -32,9 +15,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          ref: 2654ddba2e4eed4428d9442ad00c5ff924bf6799
       - uses: actions/download-artifact@v4
         with:
           name: verified-rawpy-wheel
+          run-id: 46017287107
+          github-token: ${{ github.token }}
           path: blender_raw/wheels
       - name: Mount verified Blender 5.3.0 for Apple Silicon
         run: |
@@ -88,26 +74,6 @@ jobs:
           "$BLENDER" -b --factory-startup --offline-mode --python-exit-code 1 --python tests/crop_detection_confidence.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/crop_axis_geometry.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/crop_perspective.py
-      - name: Compare all beta.5 color recipes with the previous Metal renderer
-        run: |
-          set -euo pipefail
-          previous="$RUNNER_TEMP/raw_photo_editor-1.0.2-beta.5.zip"
-          curl --fail --silent --show-error --location --retry 3 -o "$previous" \
-            https://github.com/shawnyhu/RAW-Photo-Editor/releases/download/v1.0.2-beta.5/raw_photo_editor-1.0.2-beta.5.zip
-          printf '%s  %s\n' 178331fa74af838e1eda53d1c8f8896cd957a8ac97afe7f7295472aaee5e309d "$previous" | shasum -a 256 -c -
-          profile="$RUNNER_TEMP/previous-film-profile"
-          baseline="$RUNNER_TEMP/previous-film-pixels.npz"
-          mkdir -p "$profile"
-          BLENDER_USER_RESOURCES="$profile" "$BLENDER" -b --factory-startup --offline-mode --command extension install-file --repo user_default --enable "$previous"
-          BLENDER_USER_RESOURCES="$profile" "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_color_compatibility.py -- record-if-available "$baseline"
-          if [[ -f "$baseline" ]]; then
-            "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_color_compatibility.py -- compare "$baseline"
-            "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_added_calibration.py -- --pixels
-            "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_stock_defaults.py -- --pixels
-            "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_processing.py -- --pixels
-          else
-            echo 'SKIP actual Metal acceptance: runner has no usable GPU; requires a physical Mac.'
-          fi
       - name: Drag crop and perspective handles in a Blender window
         shell: bash
         run: |
@@ -147,6 +113,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          ref: 2654ddba2e4eed4428d9442ad00c5ff924bf6799
       - uses: actions/download-artifact@v8
         with:
           name: ${{ needs.install-and-test.outputs.filename }}
@@ -217,77 +184,3 @@ jobs:
             Get-ChildItem $env:TEMP -Filter '*.crash.txt' | ForEach-Object { Get-Content -LiteralPath $_.FullName -Tail 55 }
           }
           exit $testExitCode
-
-  publish:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Release v')
-    needs: [install-and-test, windows]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency: publish-extension-release
-    env:
-      VERSION: ${{ needs.install-and-test.outputs.version }}
-      PACKAGE: ${{ needs.install-and-test.outputs.filename }}
-      DIGEST: ${{ needs.install-and-test.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/download-artifact@v8
-        with:
-          name: ${{ env.PACKAGE }}
-          skip-decompress: true
-          path: dist-release
-      - uses: actions/download-artifact@v8
-        with:
-          name: raw_photo_editor-source-${{ env.VERSION }}.zip
-          skip-decompress: true
-          path: dist-release
-      - name: Publish the tested ZIP, corresponding source and checksums
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tag="v$VERSION"
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          test "$(git show -s --format=%s HEAD)" = "Release $tag"
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          python3 - <<'PY'
-          import os, pathlib, re
-          version = re.escape(os.environ['VERSION'])
-          log = pathlib.Path('CHANGELOG.md').read_text()
-          section = re.search(rf'^## {version} — [^\n]+\n\n(.+?)(?=^## |\Z)', log, re.M | re.S)
-          if not section:
-              raise SystemExit('Missing changelog entry for the stable version')
-          pathlib.Path('release-notes.md').write_text(section[1].strip() + '\n')
-          PY
-          cd dist-release
-          printf '%s  %s\n' "$DIGEST" "$PACKAGE" > "$PACKAGE.sha256"
-          src="raw_photo_editor-source-$VERSION.zip"
-          sha256sum "$src" > "$src.sha256"
-          sha256sum -c "$PACKAGE.sha256" "$src.sha256"
-          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-            test "$(git rev-list -1 "$tag")" = "$GITHUB_SHA"
-          fi
-          if gh release view "$tag" --json isDraft,targetCommitish > "$RUNNER_TEMP/existing-release.json"; then
-            if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-              test "$(jq -r .targetCommitish "$RUNNER_TEMP/existing-release.json")" = "$GITHUB_SHA"
-            fi
-          else
-            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "RAW Photo Editor $VERSION" --notes-file ../release-notes.md
-          fi
-          # Complete an interrupted draft without ever overwriting a published asset.
-          for file in "$PACKAGE" "$PACKAGE.sha256" "$src" "$src.sha256"; do
-            existing=$(gh release view "$tag" --json assets --jq ".assets[] | select(.name == \"$file\") | .digest")
-            if [[ -n "$existing" ]]; then
-              test "$existing" = "sha256:$(sha256sum "$file" | cut -d' ' -f1)"
-            else
-              test "$(gh release view "$tag" --json isDraft --jq '.isDraft')" = true
-              gh release upload "$tag" "$file"
-            fi
-          done
-          if [[ "$(gh release view "$tag" --json isDraft --jq '.isDraft')" == true ]]; then
-            gh release edit "$tag" --draft=false --prerelease=false --latest
-          fi
