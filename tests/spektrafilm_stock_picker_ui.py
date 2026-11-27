@@ -3,10 +3,10 @@
 
 blender -b --offline-mode --python-exit-code 1 -P tests/spektrafilm_stock_picker_ui.py -- --installed --require-bw
 
-Omit -b, enable --enable-event-simulate and add --window to also render/introspect the real popover panels.
-The window variant opens the registered panels with the same explicit context
-pointer as their card button; it does not claim a mouse hit-testing check.
-PHOTO_UI_TEST_SCREENSHOTS optionally receives film/print panel screenshots.
+Omit -b, enable --enable-event-simulate and add --click to exercise the actual
+card buttons and menu selections. Tested at -p 40 40 1600 1000 and 1200 850,
+with factory 125% UI scaling. --window separately draws/introspects the menus.
+PHOTO_UI_TEST_SCREENSHOTS optionally receives each stage's screenshot.
 """
 from importlib import import_module
 import os
@@ -80,7 +80,7 @@ def prepare(*, register=True):
     if "kodak_doublex" in films:
         assert bpy.ops.blender_raw.choose_film_stock(**names, kind="film", stock="kodak_doublex") == {"FINISHED"}
         assert target.paper == "kodak_2302" and target.process == "Full Film Sim"
-        # A colour-paper button retained from an earlier popover is stale now.
+        # A colour-paper button retained from an earlier menu is stale now.
         before = film_node.recipe(target)
         rejected(**names, kind="paper", stock="kodak_2383")
         assert film_node.recipe(target) == before
@@ -110,15 +110,15 @@ def window_checks():
         node = getattr(context, "spektrafilm_stock_node", None)
         draws.append((node.as_pointer() if node else None, str(self.layout.introspect())))
 
-    for kind, panel in (("film", ui.BR_PT_film_stock_picker), ("paper", ui.BR_PT_print_stock_picker)):
+    for kind, panel in (("film", ui.BR_MT_film_stock_picker), ("paper", ui.BR_MT_print_stock_picker)):
         draws.clear()
         panel.append(inspect)
         try:
             with bpy.context.temp_override(window=window, area=area, spektrafilm_stock_node=target):
-                bpy.ops.wm.call_panel("INVOKE_DEFAULT", name=panel.bl_idname, keep_open=False)
+                bpy.ops.wm.call_menu("INVOKE_DEFAULT", name=panel.bl_idname)
             for _ in range(4):
                 yield
-            assert draws, "Stock panel did not draw"
+            assert draws, "Stock menu did not draw"
             pointer, layout = draws[-1]
             assert pointer == target.as_pointer(), (pointer, target.as_pointer())
             assert ui.BR_OT_choose_film_stock.bl_idname in layout, layout
@@ -140,7 +140,7 @@ def window_checks():
         finally:
             panel.remove(inspect)
     assert active.film == "fujifilm_provia_100f" and abs(active.grainAmount - .345) < 1e-6
-    print("PASS real stock popover layouts, brand/category labels and explicit target bindings", flush=True)
+    print("PASS real stock menu layouts, brand/category labels and explicit target bindings", flush=True)
 
 
 def click(window, x, y):
@@ -183,7 +183,7 @@ def click_checks():
         node = getattr(context, "spektrafilm_stock_node", None)
         draws.append((node.as_pointer() if node else None, str(self.layout.introspect())))
 
-    ui.BR_PT_film_stock_picker.append(inspect)
+    ui.BR_MT_film_stock_picker.append(inspect)
     try:
         panel.tag_redraw()
         yield
@@ -197,23 +197,24 @@ def click_checks():
         screenshot("click-film-open")
         assert draws, "Click did not open the Film picker"
         assert draws[-1][0] == target.as_pointer()
+        assert all(stock in draws[-1][1] for stock in engine.stocks()[0]), draws[-1][1]
         assert window.scene.compositor_effects.active == second
         # Fifth column, first B&W item: HP5 Plus. At factory 125% scale the
-        # compact popup is clamped to the right window edge and fits below
+        # compact menu is clamped to the right window edge and fits below
         # the Film button at both tested laptop/desktop window sizes.
-        yield from click(window, window.width - 150 * scale, top - 394 * scale)
+        yield from click(window, window.width - 150 * scale, top - 375 * scale)
         screenshot("click-after-film")
         assert target.film == "ilford_hp5_plus", target.film
         assert target.paper == "ilford_mgrc_deluxe_grade2", target.paper
         assert active.film == "fujifilm_provia_100f" and abs(active.grainAmount - .345) < 1e-6
         assert window.scene.compositor_effects.active == second and not target.live_preview
         draws.clear()
-        ui.BR_PT_print_stock_picker.append(inspect)
+        ui.BR_MT_print_stock_picker.append(inspect)
         try:
             yield from click(window, region.x + 180 * scale, top - 366 * scale)
             screenshot("click-print-open")
             assert draws and draws[-1][0] == target.as_pointer()
-            yield from click(window, window.width - 800 * scale, top - 460 * scale)
+            yield from click(window, window.width - 850 * scale, top - 437 * scale)
             screenshot("click-after-print")
             assert target.paper == "kodak_2302", target.paper
             assert target.film == "ilford_hp5_plus" and not target.live_preview
@@ -221,9 +222,9 @@ def click_checks():
             assert window.scene.compositor_effects.active == second
             print(f"PASS actual stock clicks at {window.width}x{window.height}: non-active Film -> HP5 -> Print -> 2302; active card unchanged", flush=True)
         finally:
-            ui.BR_PT_print_stock_picker.remove(inspect)
+            ui.BR_MT_print_stock_picker.remove(inspect)
     finally:
-        ui.BR_PT_film_stock_picker.remove(inspect)
+        ui.BR_MT_film_stock_picker.remove(inspect)
 
 
 if "--window" in sys.argv or "--click" in sys.argv:
@@ -233,7 +234,7 @@ if "--window" in sys.argv or "--click" in sys.argv:
 
     def tick():
         try:
-            assert time.monotonic() < deadline, "Timed out waiting for stock popovers"
+            assert time.monotonic() < deadline, "Timed out waiting for stock menus"
             next(steps)
             return .2
         except StopIteration:

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Brand-column material pickers, bound to the card that opened the popover."""
+"""Brand-column material menus, bound to the card that opened the selector."""
 import bpy
 from bpy.props import EnumProperty, StringProperty
 
@@ -147,7 +147,7 @@ class BR_OT_choose_film_stock(bpy.types.Operator):
         if node is None:
             return {"CANCELLED"}
         try:
-            # Recheck after opening the popover: another action may have
+            # Recheck after opening the menu: another action may have
             # changed the film, making a formerly visible print incompatible.
             if self.stock not in _choices(node, self.kind):
                 self.report({"ERROR"}, "This material is unavailable for the current film")
@@ -162,29 +162,25 @@ class BR_OT_choose_film_stock(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class BR_PT_film_stock_picker(bpy.types.Panel):
-    bl_idname = "BR_PT_film_stock_picker"
+class BR_MT_film_stock_picker(bpy.types.Menu):
+    bl_idname = "BR_MT_film_stock_picker"
     bl_label = "Film"
-    bl_space_type = "NODE_EDITOR"
-    bl_region_type = "HEADER"
-    bl_ui_units_x = 44
 
     def draw(self, context):
         node = getattr(context, "spektrafilm_stock_node", None)
         if node:
+            self.layout.ui_units_x = 44
             _draw_picker(self.layout, node, "film")
 
 
-class BR_PT_print_stock_picker(bpy.types.Panel):
-    bl_idname = "BR_PT_print_stock_picker"
+class BR_MT_print_stock_picker(bpy.types.Menu):
+    bl_idname = "BR_MT_print_stock_picker"
     bl_label = "Print"
-    bl_space_type = "NODE_EDITOR"
-    bl_region_type = "HEADER"
-    bl_ui_units_x = 37
 
     def draw(self, context):
         node = getattr(context, "spektrafilm_stock_node", None)
         if node:
+            self.layout.ui_units_x = 37
             _draw_picker(self.layout, node, "paper")
 
 
@@ -200,13 +196,13 @@ def draw_stock(layout, node, kind="film"):
     try:
         stock = _selected(node, kind)
         name = _records(kind).get(stock, {}).get("name", stock or "Choose Material")
-        button.popover(panel=BR_PT_film_stock_picker.bl_idname if kind == "film" else BR_PT_print_stock_picker.bl_idname,
-                       text=name)
+        button.menu(BR_MT_film_stock_picker.bl_idname if kind == "film" else BR_MT_print_stock_picker.bl_idname,
+                    text=name)
     except (KeyError, OSError, RuntimeError, ValueError):
         button.label(text="Materials unavailable", icon="ERROR")
 
 
-_CLASSES = (BR_OT_choose_film_stock, BR_PT_film_stock_picker, BR_PT_print_stock_picker)
+_CLASSES = (BR_OT_choose_film_stock, BR_MT_film_stock_picker, BR_MT_print_stock_picker)
 
 
 def register():

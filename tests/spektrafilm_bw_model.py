@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tomllib
 from tempfile import TemporaryDirectory
 
 import numpy as np
@@ -67,6 +68,8 @@ def check_color_tables(previous, current):
 
 def check_bw(current, root):
     catalog = current.ADDITIONAL
+    grain_presets = tomllib.loads((VENDOR / "stock_grain.toml").read_text(encoding="utf-8"))
+    grain_areas = json.loads((VENDOR / "stock_grain_areas.json").read_text(encoding="utf-8"))
     stocks = catalog["bw_films"] + catalog["bw_papers"]
     assert set(stocks) == set(REFERENCE_MINUTES)
     report = []
@@ -98,6 +101,20 @@ def check_bw(current, root):
                                    resolved["density_curves"], rtol=0, atol=1e-15, err_msg=stock)
         if layers.shape[1] == 4:
             assert np.max(layers[:, 3]) > .01, stock
+        if stock in catalog["bw_films"]:
+            # Independent scalar inversion of the layer-particle variance.
+            # BW has one physical channel; its density/area is never divided
+            # by three. The fourth layer repeats the finest supplied scale.
+            grain = grain_presets["defaults"]["bw"][info["type"]] | grain_presets.get(stock, {})
+            maxima = layers.max(axis=0)
+            fractions = maxima / maxima.sum()
+            floor = fractions * grain["density_min"][0]
+            density = layers + floor
+            source_scales = grain["particle_scale_sublayers"]
+            scales = np.asarray([source_scales[min(i, len(source_scales) - 1)] for i in range(layers.shape[1])])
+            variance = scales / fractions * density * (maxima + floor - grain["uniformity"][0] * density)
+            area = (grain["rms_granularity"][0] / 1000) ** 2 * math.pi * 24 ** 2 / variance.sum(axis=1).max()
+            np.testing.assert_allclose(grain_areas[stock], [area] * 3, rtol=2e-14, atol=1e-14, err_msg=stock)
         sensitivity = np.asarray(data["log_sensitivity"], float)[:, 0]
         silver = np.asarray(data["channel_density"], float)[:, 0]
         base = np.asarray(data["base_density"], float)[:, index]
