@@ -171,3 +171,11 @@ Windows Blender 5.3.0、RTX 4090 的独立配置离线安装通过：全图端�
 本地同名RAW以截图可见Portra800/Vision2383、Grain和CameraDiffusion设置近似重建，明确未取得用户完整配方。输入min=-0.05561984、max=0.77368838；旧公式0→0.06706775，746,890个暗部像素均值从0.00120329抬至0.06851871。新原生输出0保持0，暗部均值0.00155526，实际CPU导出与独立参考逐像素相同(max_abs=0)，Alpha不变。原片和衍生图仅留本地dist/auto-level-photo，公共包只含无照片的可复现测试脚本。
 
 最终ZIP SHA-256为 `bee15089aee7cf15d954daddab6eefa0f263cab039bed1d2e3ef05c23f473048`。Windows Blender5.3.0、RTX4090独立配置离线安装后，CPU完整Auto Level、色域、菜单与导出检查、GPU FULL黑白位及旧图迁移均通过。真实GPU AUTO Viewer负尾部测例max_abs=0.00062776，黑色实际像素严格为0；直方图标记、输入刷新、拖动、切换Auto、取消和Undo均通过。Mac实际Metal需按 [beta.8交接](auto-level-beta8-mac-handoff.md)实测；本次没有改变胶片二进制、材料数据或推荐配方。
+
+## 2026-11-27 · Apple Silicon 黑白胶片、全部配对与 1.1.0
+
+在 macOS 26.6.2、Apple M1 Ultra（48 核 GPU）和 Blender 5.3.0 上分别离线安装公开 beta.5、beta.6 与从 beta.8 标签构建的 1.1.0。按 [beta.6 同机验收步骤](spektrafilm-beta6-mac-handoff.md) 在 beta.5 录制并锁定基准。beta.6 和 1.1.0 的 672 组彩色配对、168 组颗粒和光晕输出与基准逐像素相等，60 个旧节点的配方和设置保留。64 套推荐设置、15 条黑白路径和 24 组黑白颗粒均通过实际 Metal 渲染。胶片 dylib SHA-256 为 `be004f5491f3562af62bf1705c1b5f2cce73ef90e8158fb4379ede613156344f`。
+
+另对 1.1.0 的 64 × 14 个 Film/Print 组合逐项检查。686 个支持的组合完成渲染，210 个未校准组合被拒绝，Tri-X 7266 的反转直扫单独通过。八种画幅开启颗粒与光晕后输出可区分。关闭 Live Preview 时，HP5 印片和 Tri-X 反转直扫的原生 32 位 EXR 与参考结果逐像素相等。
+
+Retina 窗口上，Blender 提供的逻辑窗口宽度与事件坐标使用的帧缓冲像素不同。修正 stock picker 窗口测试的两处右侧菜单项定位后，1200 × 850 与 1600 × 1000 的实际 Film、Print、恢复推荐和非活动卡片断言均通过。产品代码沿用 beta.8，版本升为 1.1.0。beta.4 的 160 组可选独立基准未纳入本次验收。

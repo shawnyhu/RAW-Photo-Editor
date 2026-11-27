@@ -190,6 +190,8 @@ def click_checks():
         yield
         scale = bpy.context.preferences.system.ui_scale / 1.25
         top = panel.y + panel.height
+        # Region coordinates and simulated events use framebuffer pixels on Retina.
+        right = max(area.x + area.width for area in window.screen.areas)
         yield from click(window, region.x + 43 * scale, top - 172 * scale)
         screenshot("click-before-film")
         window.scene.compositor_effects.active = second
@@ -203,7 +205,7 @@ def click_checks():
         # Fifth column, first B&W item: HP5 Plus. At factory 125% scale the
         # compact menu is clamped to the right window edge and fits below
         # the Film button at both tested laptop/desktop window sizes.
-        yield from click(window, window.width - 150 * scale, top - 431 * scale)
+        yield from click(window, right - 150 * scale, top - 431 * scale)
         screenshot("click-after-film")
         assert target.film == "ilford_hp5_plus", target.film
         assert target.paper == "ilford_mgrc_deluxe_grade2", target.paper
@@ -215,7 +217,7 @@ def click_checks():
             yield from click(window, region.x + 180 * scale, top - 428 * scale)
             screenshot("click-print-open")
             assert draws and draws[-1][0] == target.as_pointer()
-            yield from click(window, window.width - 850 * scale, top - 499 * scale)
+            yield from click(window, right - 850 * scale, top - 499 * scale)
             screenshot("click-after-print")
             assert target.paper == "kodak_2302", target.paper
             assert target.film == "ilford_hp5_plus" and not target.live_preview

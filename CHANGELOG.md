@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.0 — 2026-11-27
+
+Install `raw_photo_editor-1.1.0.zip` from **Preferences → Get Extensions → Install from Disk** in Blender 5.3 or later on Apple Silicon or Windows x64.
+
+- **Spektrafilm Lite** now offers 64 films and 14 print materials. Choose a film to load its recommended settings and compatible prints. Seven black-and-white negatives support two silver prints, and Tri-X 7266 supports direct reversal scanning. Tri-X 400 / D-76 and Ilford Multigrade RC Deluxe Grade 2 are experimental.
+- **Personal Presets** save custom looks across projects. RGB to Raw, Film Format and Push / Pull are editable, and **Film Defaults** restores the selected stock’s recommendation.
+- **Auto Level** adapts to each photo when copying adjustments or exporting at full resolution. Film grain and negative RGB values preserve visible black. Drag the histogram markers for manual control. Existing beta.7 projects upgrade on open and retain manual values and animation.
+- **Crop & Perspective** supports vertical, horizontal and combined corrections. RAW preview can start while gallery thumbnails are being generated. The photo workspace also gains native adjustment cards and a choice of canvas backgrounds.
+- On Apple M1 Ultra, all 672 legacy color pairs and 168 grain and halation cases matched the beta.5 Metal output pixel for pixel. All 15 black-and-white paths and 24 black-and-white grain cases passed, along with both full-resolution photo exports in the Auto Level regression.
+
 ## 1.0.2-beta.8 — 2026-11-27
 
 - Fixed Auto Level lifting black and washing out film images when grain or color processing produced negative RGB values. Automatic endpoints now stay within 0–1: negative values cannot lift black, and super-white values cannot pull white down. RGB channels still share one range. Manual negative/HDR endpoints remain available.
