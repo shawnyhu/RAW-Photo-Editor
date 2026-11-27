@@ -4,4 +4,4 @@
 - **Raw Developer** 的三组设置是 **Camera & Look**、**White Balance**、**Auto Exposure**。曝光补偿在第三组第一行。取消勾选 **As Shot** 即进入 **Spot**，用 **Pick Area** 选择测光位置，也可以切换其他测光模式。已保存的曝光补偿和关键帧继续生效。
 - 在 Photo Workspace 的 Image Viewer 按 **N → Editor → Canvas Background**，可选纯黑、深灰和浅灰。默认纯黑，选择随工作区保存。
 
-[用户指南](https://github.com/shawnyhu/RAW-Photo-Editor/blob/fdee77629977c742537c9d602d923e073870c9c5/docs/workflow.md) · [开发日志](https://github.com/shawnyhu/RAW-Photo-Editor/blob/fdee77629977c742537c9d602d923e073870c9c5/docs/development-log.md) · [跨平台验证](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45929583156)
+[用户指南](https://github.com/shawnyhu/RAW-Photo-Editor/blob/e9ee18b2f2f501c63408b27200ce243505b9ce95/docs/workflow.md) · [开发日志](https://github.com/shawnyhu/RAW-Photo-Editor/blob/e9ee18b2f2f501c63408b27200ce243505b9ce95/docs/development-log.md) · [跨平台验证](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45930095218)
