@@ -15,9 +15,11 @@ def build():
     dylib = "libphoto_film.dylib"
     with TemporaryDirectory(prefix="photo-spektrafilm-build-") as temporary:
         root = Path(temporary)
-        with tarfile.open(vendor / "core-source.tar.gz") as archive:
-            archive.extractall(root, filter="data")
+        for name in ("core-source.tar.gz", "additional-stock-data.tar.gz"):
+            with tarfile.open(vendor / name) as archive:
+                archive.extractall(root, filter="data")
         subprocess.run(["patch", "-p1", "-i", str(vendor / "extension.patch")], cwd=root, check=True)
+        subprocess.run(["patch", "-p1", "-i", str(vendor / "stock-tables.patch")], cwd=root, check=True)
         subprocess.run([sys.executable, "tools/generate_profile_curves.py",
                         "--output", "SpektraGeneratedProfileCurves.cpp",
                         "--counts-output", "SpektraGeneratedProfileCounts.h",
