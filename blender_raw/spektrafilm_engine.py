@@ -2,11 +2,14 @@
 """Straight linear Rec.709 float RGB interface to the native film renderer."""
 import ctypes as ct
 from functools import lru_cache
+import json
 from math import isfinite
 from numbers import Integral, Real
 from pathlib import Path
 import platform
 import sys
+import tomllib
+from typing import NamedTuple
 
 import numpy as np
 
@@ -24,6 +27,17 @@ class _Descriptor(ct.Structure):
 
 class _Parameter(ct.Structure):
     _fields_ = [("name", ct.c_char_p), ("kind", ct.c_int32), ("values", ct.c_double * 3)]
+
+
+class _StockCalibration(ct.Structure):
+    _fields_ = [("dirGammaSameLayerRgb", ct.c_float * 3), ("dirGammaRToGb", ct.c_float * 2),
+                ("dirGammaGToRb", ct.c_float * 2), ("dirGammaBToRg", ct.c_float * 2),
+                ("halationStrength", ct.c_float * 3)]
+
+
+class FilmCalibration(NamedTuple):
+    reversal: bool
+    parameters: dict
 
 
 # SpektraAppParamKind from the pinned native app bridge.
@@ -118,11 +132,60 @@ def default_film():
     return stocks()[0][_descriptors()["film"].default_int]
 
 
+@lru_cache(maxsize=1)
+def _stock_grain_table():
+    folder = Path(__file__).resolve().parent / "vendor" / "spektrafilm"
+    with (folder / "stock_grain.toml").open("rb") as file:
+        presets = tomllib.load(file)
+    areas = json.loads((folder / "stock_grain_areas.json").read_bytes())
+    return presets, areas
+
+
+@lru_cache(maxsize=256)
+def added_stock_calibration(film):
+    """Read the new stock's polarity and defaults from its compiled spectral record.
+
+    The first twenty entries retain the historical RNA defaults used by saved
+    nodes and legacy presets. New film IDs are appended after them on both GPUs.
+    """
+    if not film:
+        return None
+    try:
+        index = stocks()[0].index(film)
+    except (ValueError, OSError, RuntimeError):
+        return None
+    if index < 20:
+        return None
+    read = _library().photo_film_stock_calibration
+    read.argtypes = [ct.c_int32, ct.POINTER(_StockCalibration)]
+    read.restype = ct.c_char_p
+    result = _StockCalibration()
+    polarity = read(index, ct.byref(result))
+    if polarity not in (b"negative", b"positive"):
+        raise ValueError(f"Invalid calibration for film stock {film!r}")
+    parameters = {name: tuple(getattr(result, name)) for name, _kind in _StockCalibration._fields_}
+    table, areas = _stock_grain_table()
+    grain = table["defaults"]["color"][polarity.decode()] | table.get(film, {})
+    # Lite multiplies the single editable area by separate RGB factors.
+    # Their product equals the area derived from the stock RMS and curves.
+    area = sum(areas[film]) / 3
+    parameters["grainParticleAreaUm2"] = area
+    parameters["grainParticleScale"] = tuple(channel / area for channel in areas[film])
+    for key, source in (("grainUniformity", "uniformity"), ("grainDensityMin", "density_min"),
+                        ("grainParticleScaleLayers", "particle_scale_sublayers")):
+        parameters[key] = tuple(grain[source])
+    return FilmCalibration(polarity == b"positive", parameters)
+
+
 def is_slide(film):
-    return film in _SLIDE_DIR_DEFAULTS
+    calibration = added_stock_calibration(film)
+    return calibration.reversal if calibration else film in _SLIDE_DIR_DEFAULTS
 
 
 def dir_defaults(film):
+    calibration = added_stock_calibration(film)
+    if calibration:
+        return {key: calibration.parameters[key] for key in _DIR_MATRIX_PARAMETERS}
     values = _SLIDE_DIR_DEFAULTS.get(film, tuple(BY_KEY[key].default for key in _DIR_MATRIX_PARAMETERS))
     return dict(zip(_DIR_MATRIX_PARAMETERS, values))
 
@@ -221,8 +284,12 @@ def render_rgba(rgba, *, film="", paper="", exposure=0.0, print_exposure=0.0,
     if "film" in settings and settings.get("process", 0) != 2:
         validate_parameter("film", settings["film"])
         stock = stocks()[0][settings["film"]]
-        for name, value in zip(_DIR_MATRIX_PARAMETERS, _SLIDE_DIR_DEFAULTS.get(stock, ())):
-            settings.setdefault(name, value)
+        if calibration := added_stock_calibration(stock):
+            for name, value in calibration.parameters.items():
+                settings.setdefault(name, value)
+        else:
+            for name, value in zip(_DIR_MATRIX_PARAMETERS, _SLIDE_DIR_DEFAULTS.get(stock, ())):
+                settings.setdefault(name, value)
     values = []
     for name, value in settings.items():
         kind = validate_parameter(name, value)

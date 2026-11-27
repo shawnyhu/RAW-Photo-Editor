@@ -22,10 +22,11 @@ def build(args):
         def run(*command):
             subprocess.run(command, cwd=root, check=True)
 
-        for name in ("core-source.tar.gz", "vulkan-source.tar.gz"):
+        for name in ("core-source.tar.gz", "vulkan-source.tar.gz", "additional-stock-data.tar.gz"):
             with tarfile.open(HERE / name) as archive:
                 archive.extractall(root, filter="data")
 
+        run("git", "apply", "--no-index", HERE / "stock-tables.patch")
         run(sys.executable, "tools/generate_profile_curves.py",
             "--output", "SpektraGeneratedProfileCurves.cpp",
             "--counts-output", "SpektraGeneratedProfileCounts.h",

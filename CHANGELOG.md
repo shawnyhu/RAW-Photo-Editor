@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2-beta.5 — 2026-11-27
+
+- Spektrafilm Lite ships four built-in presets: **FUJI Pro 400H**, **FUJI Provia100f**, **KODAK Ektar 100** and **KODAK Portra 800**. Open **Presets → Built-in Presets** on any Lite node to apply one. Save an edited version under a name in your personal library.
+- The Film and Print selectors now contain **56 films and 12 print materials**. Added 32 film profiles from Negs, Kodak Vision2 50D/100T/500T and UltraMax 800 from The Dyeworks, and four Fujifilm Eterna-CP print films. Selecting an added film loads its DIR, halation and grain defaults together with its compiled spectral and development data; selecting print material uses the corresponding calibrated print filters. All data ship with Lite for offline use.
+- Retained the original 20 film and 8 print indices. Added profiles include their source metadata, licenses and adaptation notes. UltraMax 800 uses its own characteristic curves with UltraMax 400 spectral data; rendered results follow Lite's model.
+
 ## 1.0.2-beta.4 — 2026-11-27
 
 - In **Spektrafilm Lite → Presets**, save the current node settings under a name, apply a saved look, rename it or delete it. The library is shared across projects and Blender versions on the same user account. Applying a look preserves the destination node's Live Preview setting.

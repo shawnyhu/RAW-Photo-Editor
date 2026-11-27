@@ -88,6 +88,9 @@ def test():
         for action in ('save', 'apply', 'rename', 'delete'):
             assert f'blender_raw.{action}_film_preset' in layout, (action, layout)
         assert preset_name in layout and preset_id in layout, layout
+        assert 'Built-in Presets' in layout
+        for key, name in ui.film_user_library.BUILTIN_PRESETS.items():
+            assert name in layout and key in layout, layout
         assert window.scene.compositor_effects.active == second
         yield from click(window, x, top - 301 * scale)
         assert abs(target.grainAmount - .345) < 1e-5, target.grainAmount

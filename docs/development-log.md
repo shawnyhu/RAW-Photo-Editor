@@ -84,3 +84,24 @@ Lite 现在从当前节点保存预设。之前的外部文件导入操作也会
 Grid 只在创建照片工作区查看器时设置默认值。Windows 5.3.0 窗口验证了新工作区关闭网格，用户手动打开后重新进入工作区、保存并重开工程均能保留。[查看器回归](../tests/viewer_background_ui.py)
 
 公开测试包对应提交 [7f3555e](https://github.com/shawnyhu/RAW-Photo-Editor/commit/7f3555e3ebd63dfb1aacb1acd267daad5018fc2d)。Apple Silicon 和 Windows x64 用 Blender 5.3.0 安装同一个 ZIP，通过了两次独立启动之间的预设保存与调用。另在 Windows 将同一个系统账户指向两个全新的插件安装配置，使用真实的用户预设路径，第二套配置仍可读取第一套保存的胶片参数。之后的 Blender 大版本需在对应版本发布时再次验证扩展兼容性。安装包 SHA-256 为 `d7704cb93d17570b729f85c927fdf5bf5effa76b28d6f0b6252d3ea654eec55f`。[跨平台验证记录](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45947138524)
+
+## 2026-11-27 · Lite 完整内置预设与材料扩充（1.0.2-beta.5，待 Mac 实机验收）
+
+四份用户保存的 FUJI Pro 400H、FUJI Provia100f、KODAK Ektar 100、KODAK Portra 800 JSON 原样内置，按字节与原件核对。应用时恢复完整配方，保留目标 Live Preview；同名个人副本继续独立保存、重命名和删除。[资源](../blender_raw/assets/film_presets/) · [预设库](../blender_raw/film_user_library.py) · [跨进程验收](../tests/spektrafilm_user_preset_flow.py)
+
+材料选择器由 20 款胶片、8 款印片扩至 56/12。新增 32 款胶片与四款 Fujifilm Eterna-CP 印片来自固定版本 Negs；Kodak Vision2 50D、100T、500T 和 UltraMax 800 来自 The Dyeworks 2.2.3。仅追加原库缺少且来源、许可和校准完整的数据，保留原索引。新增材料的光谱、特性曲线与印片滤镜编译到两端原生库；选胶片时同步其 DIR、光晕与颗粒参数。新增反转片选中后采用 Negative only，Print only 的独立选择保持。四款 Dyeworks 与四款新印片的 16 对 TH-KG3 滤镜由开源参考程序求解。UltraMax 800 沿用同系列 400 的光谱模型并使用自身特性曲线，来源还含其他继承参数；模型限制及逐款归属见[材料变更记录](../blender_raw/vendor/spektrafilm/CHANGELOG.txt)和归档内 JSON。运行无需安装 OFX。
+
+**最后一次构建修正。** 四款 Dyeworks 初次构建使用了通用负片 DIR 分组；最终数据改用各自来源的同层及 R/G/B 层间分组。`additional-stock-data.tar.gz` 的 Git blob 为 `5961ab97724b62834330d8b487c2e4495323d3fb`，SHA-256 为 `4815ffee01ae69502cb61fd1b275d86f9c7c0f11335f15d70bad8fa41006613e`。Windows 在现成 LLVM-MinGW/Vulkan 工具链中重建，结果与此前修正产物逐字节相等；原生 copy、core 和多 tile/full-frame 像素对照通过。DLL SHA-256 为 `8902e69a95170eebe1a6c2147f297758bc2ad2ff3222bafea02ed73305fc42e9`。
+
+Apple Silicon 取自[最终构建](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45952613175)，构建提交 `b9bf4d6`。归档摘要与 CI 一致，arm64、严格签名及 56/12 型号检查通过；从 Mach-O 符号地址读取四款真实 DIR 的全部分组，与修正数据一致。dylib SHA-256 为 `19a700d2c9e3a47fa07fd3de22e09083fc15e30a8496a69aa08ab16ae87b7d30`。两端构建输入已核对一致，着色器和原有共享浮点表保持原内容。
+
+**最终候选安装包的 Windows 验收。** Blender 5.3.0、NVIDIA GeForce RTX 4090，在新用户配置中离线安装 ZIP，通过以下项目：
+
+- 使用既有 beta.4 的同机基准逐像素比较原有 20×8 配对，160 组完全一致，原索引和选择顺序一致。基准 SHA-256 为 `907f851318095ba838039faa2ebe63c12302b7093db66c05d309ff4559721f97`，未重新录制或覆盖。全部 512 组新增配对输出有限且灰阶非平坦。[配对测试](../tests/spektrafilm_stock_pixels.py)
+- 36 款新增胶片校准、四款 Dyeworks 全部 DIR 分组、负片/反转片/印片及生产颗粒实际 GPU 输出通过；36 款逐一编辑并保存重开，完整配方和印片选择保持。[新增校准](../tests/spektrafilm_added_calibration.py)
+- 既有 Portra→Velvia 实际像素、完整校准继承、复制与保存重开通过。[原有校准](../tests/spektrafilm_calibration.py)
+- 四份内置预设的完整参数恢复、Live Preview 开/关保持、已有同名个人副本管理、跨进程个人预设通过；真实窗口点击确认非活动卡片能正确应用预设。原生离线安装、依赖、Scene 与 EXR 导出像素通过。
+
+源码打包检查现覆盖允许目录中的未忽略、未跟踪文件，显式要求附带新增数据、两个生成脚本、grain 表、patch、配对滤镜、四份预设以及五份来源许可/归属文件。安装包逐文件与工作副本及源码包核对。[分发检查](../tools/verify_distribution.py)
+
+安装包 SHA-256：`178331fa74af838e1eda53d1c8f8896cd957a8ac97afe7f7295472aaee5e309d`。本地日志在 `dist/beta5-final-validation/`，原生构建证据在 `dist/stock-rebuild/`。beta.5 尚未正式发布。Mac CI 本次仅提供构建证据，未执行最终包的 160 组 Metal 像素对照；用户提供 Apple Silicon 实机继续验收。[Mac Codex 交接 prompt](spektrafilm-beta5-mac-handoff.md)要求在同机分别安装 beta.4 与本包，用 `record` 与 `compare` 实渲染，保留逐项结果和日志。

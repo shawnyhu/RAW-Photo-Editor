@@ -1,0 +1,56 @@
+--- a/tools/ofx_stock_lists.py
++++ b/tools/ofx_stock_lists.py
+@@ -1,6 +1,9 @@
+ """Shared OFX stock ordering for the self-contained native plugin build."""
+ 
+ from __future__ import annotations
++
++import json
++from pathlib import Path
+ 
+ 
+ DEFAULT_FILM_STOCK = "kodak_portra_400"
+@@ -41,8 +44,9 @@
+ )
+ 
+ 
+-FILMS = list(_LEGACY_FILM_ORDER)
+-PAPERS = list(_LEGACY_PAPER_ORDER)
++ADDITIONAL = json.loads((Path(__file__).resolve().parents[1] / "Resources" / "data" / "stock_catalog.json").read_text(encoding="utf-8"))
++FILMS = [*_LEGACY_FILM_ORDER, *ADDITIONAL["films"]]
++PAPERS = [*_LEGACY_PAPER_ORDER, *ADDITIONAL["papers"]]
+ DEFAULT_FILM_INDEX = FILMS.index(DEFAULT_FILM_STOCK)
+ DEFAULT_PAPER_INDEX = PAPERS.index(DEFAULT_PAPER_STOCK)
+ 
+--- a/tools/generate_profile_curves.py
++++ b/tools/generate_profile_curves.py
+@@ -31,7 +31,7 @@
+ import colour
+ import scipy.interpolate
+ import scipy.special
+-from ofx_stock_lists import DEFAULT_FILM_INDEX, DEFAULT_PAPER_INDEX, FILMS, PAPERS
++from ofx_stock_lists import ADDITIONAL, DEFAULT_FILM_INDEX, DEFAULT_PAPER_INDEX, FILMS, PAPERS
+ 
+ SPECTRAL_SHAPE = colour.SpectralShape(380, 780, 5)
+ STANDARD_OBSERVER_CMFS = colour.MSDS_CMFS["CIE 1931 2 Degree Standard Observer"].copy().align(SPECTRAL_SHAPE)
+@@ -758,7 +758,10 @@
+     table: list[list[float]] = []
+     for paper in PAPERS:
+         for film in FILMS:
+-            values = filters.get(paper, {}).get("TH-KG3", {}).get(film, fallback)
++            if paper in ADDITIONAL["papers"] or film in ADDITIONAL["films"]:
++                values = ADDITIONAL["print_filters"][paper][film]
++            else:
++                values = filters.get(paper, {}).get("TH-KG3", {}).get(film, fallback)
+             table.append([float(value) for value in values])
+     return table
+ 
+@@ -969,6 +972,8 @@
+ 
+ def _dir_coupler_defaults(info: dict) -> dict[str, tuple[float, ...]]:
+     """Mirror the Python runtime's film-specific DIR defaults for native OFX data."""
++    if info["stock"] in ADDITIONAL["couplers"]:
++        return ADDITIONAL["couplers"][info["stock"]]
+     if info["type"] == "positive":
+         defaults = {
+             "same_layer_rgb": (0.12, 0.08, 0.06),

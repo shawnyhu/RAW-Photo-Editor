@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Keep the upstream, revision-specific render parameter layout inside C++.
 #include "SpektraAppBridge.h"
+#include "SpektraProfileCurves.h"
+#include <algorithm>
 #include <cstdio>
 #include <exception>
 #include <memory>
@@ -35,6 +37,27 @@ struct PhotoFilmParameter {
   int32_t kind;
   double value[3];
 };
+
+struct PhotoFilmStockCalibration {
+  float dirSameLayer[3];
+  float dirRed[2];
+  float dirGreen[2];
+  float dirBlue[2];
+  float halationStrength[3];
+};
+
+// Return exactly the stock data compiled into this renderer. Keep the C++
+// ProfileCurveSet layout private so it can change independently of Blender.
+extern "C" const char *photo_film_stock_calibration(int32_t index, PhotoFilmStockCalibration *out) {
+  const auto *film = spektrafilm::filmProfileCurves(index);
+  if (!film || !out) return nullptr;
+  std::copy_n(film->dirGammaSameLayerRgb, 3, out->dirSameLayer);
+  std::copy_n(film->dirGammaRToGb, 2, out->dirRed);
+  std::copy_n(film->dirGammaGToRb, 2, out->dirGreen);
+  std::copy_n(film->dirGammaBToRg, 2, out->dirBlue);
+  std::copy_n(film->halationStrength, 3, out->halationStrength);
+  return film->type;
+}
 
 static int render_frame(float *source, float *result, int width, int height,
                         SpektraAppRenderParams &recipe, double frame, char *error, size_t error_size) {

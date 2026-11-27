@@ -47,6 +47,20 @@ class PresetLibraryTests(unittest.TestCase):
             library.delete("../outside")
         self.assertEqual(library.list_presets(), [(first, "Café"), (second, "Other")])
 
+    def test_builtin_presets_and_same_named_user_copy(self):
+        self.assertEqual(len(library.BUILTIN_PRESETS), 4)
+        for key, name in library.BUILTIN_PRESETS.items():
+            settings = library.load(key)
+            user_id = library.save(name, {"film": "custom"})
+            self.assertEqual(library.load(user_id), {"film": "custom"})
+            with self.assertRaisesRegex(ValueError, "read-only"):
+                library.rename(key, "Renamed")
+            with self.assertRaisesRegex(ValueError, "read-only"):
+                library.delete(key)
+            library.delete(user_id)
+            self.assertEqual(library.load(key), settings)
+        self.assertFalse(library.list_presets())
+
     def test_failed_replacement_preserves_committed_file(self):
         first = library.save("Original", {"grain": True})
         with patch.object(os, "replace", side_effect=OSError("interrupted")), self.assertRaises(OSError):

@@ -1,0 +1,49 @@
+2026-11-27 — Additional profiles compiled into RAW Photo Editor
+
+Additional film and print data are licensed under CC BY-SA 4.0
+(https://creativecommons.org/licenses/by-sa/4.0/). Copyright for each
+individual profile and its source measurements is documented inside that
+profile. Film and print names identify the materials being simulated.
+
+Source: Negs by Noah Haasis, revision 2f5b5703d807e9490801d9155ac30b2c19460551
+https://github.com/noahhaasis/negs/tree/2f5b5703d807e9490801d9155ac30b2c19460551/data
+Includes profiles from spektrafilm by Andrea Volpato
+(https://github.com/andreavolpato/spektrafilm) and from Fotufilm by
+MUAStudio Inc. (https://fotufilm.com, https://github.com/DhaliwalX/fotufilm-engine).
+The applicable SPEKTRAFILM_LICENSE.txt, FOTUFILM_LICENSE.txt and upstream
+CHANGELOG.txt are included under Legal/Negs in additional-stock-data.tar.gz.
+
+RAW Photo Editor selected additional three-channel profiles with a complete
+TH-KG3 neutral print-filter table. Profiles marked approximate by the source
+were excluded. The supplied JSON retains the source values and per-stock
+metadata. Additional paper targets include the Fujifilm Eterna-CP 3513DI,
+3514DI, 3521XD and 3523XD motion-picture print films.
+
+We compiled the measurements using the bundled Metal/Vulkan table generator.
+The additional profiles' names follow the existing film and paper indices.
+For these profiles we extracted the corresponding neutral filters and DIR
+coupler coefficients from Negs. stock_grain.toml contains the source grain
+presets with upstream notices. Lite uses the physical parameters supported
+by its own grain model. The implementation and stock-specific responses
+can differ from other applications using these materials.
+
+Four additional profiles are from The Dyeworks 2.2.3 by Celian Le Bolloch,
+https://github.com/natcelian/spektrafilm.exe/releases/tag/2.2.3. See the
+included upstream notices in Legal/Dyeworks. Kodak Vision2 50D (5201),
+100T (5212), and 500T (5260) were prepared from Kodak motion-picture
+datasheets using Andrea Volpato's published profile factory. These retain
+their source profiles' Vision3-derived adaptation parameters. The UltraMax
+800 profile fits Kodak's E-7024 characteristic curves using the spectral
+data from the related UltraMax 400 profile. All profiles and their
+modifications are CC BY-SA 4.0. Their JSON metadata distinguishes the
+datasheet values from inherited or estimated parameters.
+
+For these four films on the eight existing print stocks, the enlarger settings
+are from Dyeworks. For their 16 combinations with the four new Eterna-CP
+print stocks, RAW Photo Editor derived TH-KG3 settings with Andrea Volpato's
+solve_neutral_filter_shifts at spektrafilm commit 28bf883. The reference
+pipeline exposes an 18.4% neutral patch and solves M and Y with C held at
+zero. On the 16 resulting settings, the maximum relative R/G or B/G
+deviation was below 0.000002 in that reference pipeline. The data are in
+dyeworks-eterna-print-filters.json, CC BY-SA 4.0. Lite uses its own rendering
+pipeline. See the included JSON for the individual filters and measurements.

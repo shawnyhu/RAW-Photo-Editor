@@ -4,6 +4,7 @@ EXPORTS
     photo_film_render
     photo_film_render_effects
     photo_film_render_parameters
+    photo_film_stock_calibration
     SpektraRendererCreate
     SpektraRendererDestroy
     SpektraRendererIsAvailable

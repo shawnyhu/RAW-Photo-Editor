@@ -14,6 +14,20 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT_FILES = {
     "README.md", "CHANGELOG.md", "LICENSE", ".gitignore", ".gitattributes", "AGENTS.md",
     "docs/workflow.md", "docs/development.md", "docs/development-log.md",
+    "docs/spektrafilm-beta5-mac-handoff.md",
+}
+STOCK_FILES = {
+    "additional-stock-data.tar.gz", "pack_stock_data.py", "pack_stock_grain.py",
+    "stock_grain.toml", "stock_grain_areas.json", "stock-tables.patch",
+    "dyeworks-eterna-print-filters.json", "NOTICE.md", "CHANGELOG.txt",
+}
+BUILTIN_PRESETS = {
+    "fuji-pro-400h.json", "fuji-provia-100f.json", "kodak-ektar-100.json", "kodak-portra-800.json",
+}
+STOCK_NOTICES = {
+    "Legal/Negs/FOTUFILM_LICENSE.txt", "Legal/Negs/SPEKTRAFILM_LICENSE.txt",
+    "Legal/Negs/CHANGELOG.txt", "Legal/Dyeworks/SPEKTRAFILM_LICENSE.txt",
+    "Legal/Dyeworks/CHANGELOG.txt",
 }
 
 
@@ -54,6 +68,12 @@ def build(artifact, source):
         assert set(schema["choice_dependencies"]) == {"film", "paper"}
         assert "quickPresetSelection" not in {p["name"] for p in schema["parameters"]}
         assert "10.25039/CIE.DS.xvudnb9b" in package.read("vendor/spektrafilm/NOTICE.md").decode()
+        required = {"vendor/spektrafilm/" + name for name in STOCK_FILES}
+        required.update("assets/film_presets/" + name for name in BUILTIN_PRESETS)
+        assert required <= paths, "Missing bundled stock/preset sources: " + str(sorted(required - paths))
+        with tarfile.open(fileobj=io.BytesIO(package.read("vendor/spektrafilm/additional-stock-data.tar.gz"))) as stocks:
+            assert STOCK_NOTICES <= set(stocks.getnames()), "Missing stock license or attribution"
+            assert all(stocks.extractfile(name).read().strip() for name in STOCK_NOTICES)
         for name in paths:
             if name.endswith("/"):
                 continue
@@ -61,7 +81,12 @@ def build(artifact, source):
             assert data == (ROOT / "blender_raw" / name).read_bytes(), name
             inspect_file(name, data)
 
-    files = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
+    # Include new, non-ignored working files before a release commit is made.
+    # Keep the existing directory allowlist so dist and local investigation
+    # material cannot enter the source archive through this discovery step.
+    files = subprocess.check_output(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=ROOT
+    ).decode().split("\0")
     selected = {p for p in files if p in ROOT_FILES or p.startswith(("blender_raw/", "tools/", "tests/", ".github/workflows/"))}
     selected.add("blender_raw/" + wheel)
     with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_DEFLATED) as output:

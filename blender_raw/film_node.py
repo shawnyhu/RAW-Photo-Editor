@@ -45,6 +45,11 @@ def recipe(node):
     parameters = _stored_parameters(node.preset_parameters) if node.preset_parameters else {}
     settings["parameters"] = {k: v for k, v in parameters.items()
                               if k not in effects and k not in FIXED_EXPOSURES}
+    calibration = spektrafilm_engine.added_stock_calibration(node.film)
+    if calibration:
+        for key, value in calibration.parameters.items():
+            if key not in effects and (key not in settings["parameters"] or node.preset_film != node.film):
+                settings["parameters"][key] = value
     settings["parameters"].update(process=PROCESS_MODES.index(node.process),
                                   scanNegativeInvert=node.scanNegativeInvert)
     return settings
@@ -224,6 +229,10 @@ def _film_changed(node, _context=None):
         # and all unrelated effects survive a stock change.
         for key in DIR_MATRIX_PARAMETERS:
             node.property_unset(key)
+        if spektrafilm_engine.added_stock_calibration(stock):
+            # Restore physical defaults for the stock's backing and grain size.
+            node.property_unset("halationStrength")
+            node.property_unset("grainParticleAreaUm2")
         if node.process != PROCESS_MODES[2]:
             node.process = PROCESS_MODES[1 if spektrafilm_engine.is_slide(stock) else 0]
             node.scanNegativeInvert = False
@@ -253,6 +262,17 @@ def _effect_property(effect, stored_in_old_presets):
         options["get_transform"] = _preset_parameter(effect.key)
     if effect.key in DIR_MATRIX_PARAMETERS:
         options["get_transform"] = _dir_value(effect.key)
+    elif effect.key in {"halationStrength", "grainParticleAreaUm2"}:
+        legacy = options["get_transform"]
+
+        def stock_value(node, value, is_set):
+            if not is_set:
+                calibration = spektrafilm_engine.added_stock_calibration(_current_film(node))
+                if calibration:
+                    return calibration.parameters[effect.key]
+            return legacy(node, value, is_set)
+
+        options["get_transform"] = stock_value
     if isinstance(effect.default, tuple):
         return FloatVectorProperty(size=len(effect.default), default=effect.default, min=effect.minimum,
                                    max=effect.maximum, precision=3, **options)

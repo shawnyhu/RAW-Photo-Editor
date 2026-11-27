@@ -32,6 +32,10 @@ Press **Enter** to apply or **Esc** to discard the current drag session. Each ap
 
 Presets are shared across projects and Blender versions for the current OS user. For backup or transfer to another computer, copy the **Spektrafilm Lite** folder. On macOS it is in `~/Library/Application Support/Blender/RAW Photo Editor/`. On Windows it is in `%APPDATA%\Blender Foundation\Blender\RAW Photo Editor\`.
 
+**Presets → Built-in Presets** includes FUJI Pro 400H, FUJI Provia100f, KODAK Ektar 100 and KODAK Portra 800 on a fresh installation. Click a name to apply the complete recipe. To make a variation, edit the node and choose **Save Current as Preset**. Existing personal presets with the same name remain in the editable list above.
+
+The **Film** and **Print** selectors offer 56 films and 12 print materials. The additional films load their stock-specific DIR, halation and grain defaults when selected. Their spectral curves, development data and paired print-filter calibration are included in the offline engine. The original 20 film and 8 print entries keep their indices. The four additional print films are Fujifilm Eterna-CP 3513DI, 3514DI, 3521XD and 3523XD. Sources, licenses and modeling limits are recorded in the bundled [stock changelog](../blender_raw/vendor/spektrafilm/CHANGELOG.txt).
+
 **Spektrafilm OFX** runs the official plugin in a separate process and requires a complete installation of that plugin. Use **Locate Spektrafilm OFX Folder** if Blender cannot find it. The **?** beside a control reads its help from the installed plugin. **Built-in Looks** opens that installation’s preset menu. [Official OFX download](https://spektrafilm.114c.de/)
 
 Open **Add Scene Effect → Adjust** to add a card for **Brightness/Contrast**, **Color Balance**, **Color Correction**, **Exposure**, **Gamma**, **Hue Correct**, **Hue/Saturation/Value**, **RGB Curves** or **Tonemap**. Edit it in the effect stack. The two Spektrafilm entries form their own group in the add menu.

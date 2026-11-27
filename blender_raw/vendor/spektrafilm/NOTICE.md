@@ -3,7 +3,7 @@
 The Apple Silicon Metal and Windows x64 Vulkan builds use Aedan Diez's GPL-3.0 renderers from
 [spektrafilm-ofx at 86476af](https://github.com/chaert-s/spektrafilm-ofx/tree/86476afc5b077de77e2278e3658d1ba9309892a1),
 based on the [spektrafilm simulation by Andrea Volpato](https://github.com/andreavolpato/spektrafilm).
-The shipped film and paper tables derive from Andrea Volpato's profiles, licensed
+The original 20 film and eight paper tables derive from Andrea Volpato's profiles, licensed
 CC BY-SA 4.0. See `SPEKTRAFILM_LICENSE.txt` and the upstream attribution in
 `THIRD_PARTY_NOTICES.txt`. The table generator uses Colour's colorimetric and
 spectral reference data (`LICENSE.colour-science`).
@@ -24,12 +24,34 @@ The public source provides filtered-enlarger print timing. This package is an
 independent build. It uses no resources extracted from installed apps or OFX
 distributions.
 
-For the four slide stocks, the Python adapter supplies the stock-specific DIR
+Additional colour film and motion-picture print stocks come from
+[Negs by Noah Haasis](https://github.com/noahhaasis/negs/tree/2f5b5703d807e9490801d9155ac30b2c19460551/data).
+Their profiles and calibration data are CC BY-SA 4.0. They include work by Noah
+Haasis, Andrea Volpato and MUAStudio Inc. (Fotufilm). Each JSON records the
+individual author, measurements, source and fitting assumptions. See the
+[stock changelog](CHANGELOG.txt) and the upstream notices under
+`Legal/Negs/` in `additional-stock-data.tar.gz`. Four further stocks come from the
+CC BY-SA 4.0 profiles in [The Dyeworks 2.2.3 by Celian Le Bolloch](https://github.com/natcelian/spektrafilm.exe/releases/tag/2.2.3).
+See `Legal/Dyeworks/` in the same archive.
+
+Both native builds extract that archive and apply `stock-tables.patch` to the
+pinned generator. Additional film and print IDs are appended. Their TH-KG3
+enlarger filters are required for every selectable pair. Previously shipped
+pairs use their original table and original indices. To recreate this data
+archive from the pinned Negs checkout and the Dyeworks release data, run
+`python pack_stock_data.py /path/to/negs /path/to/dyeworks-input`. The second
+directory contains the four stock JSONs, `neutral_print_filters.json`, `couplers.toml`
+and the release's `CHANGELOG.txt` and `SPEKTRAFILM_LICENSE.txt`. Run
+`python pack_stock_grain.py` to regenerate the new stocks' particle areas from
+the supplied layer curves and RMS granularity using the
+[upstream grain model](https://github.com/andreavolpato/spektrafilm/blob/28bf883e1672e884307edc75852549376e13644e/src/spektrafilm/model/grain.py).
+
+For the four original slide stocks, the Python adapter supplies the stock-specific DIR
 matrices from the pinned table generator's `_dir_coupler_defaults()` when the
 recipe does not explicitly provide them. This avoids applying the app bridge's
 fixed negative-film matrix to reversal film. Preset matrix overrides are
-preserved. The adjustment is shared by Metal and Vulkan; the native binaries
-and original profile values are unchanged.
+preserved. The adjustment is shared by Metal and Vulkan. The original profile
+values remain unchanged when rebuilding the native libraries with added stocks.
 
 ### Rebuilding for Apple Silicon
 
