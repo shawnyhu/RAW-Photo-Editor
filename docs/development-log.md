@@ -157,3 +157,17 @@ Apple Silicon 最终 [CI 构建 45967123111](https://github.com/shawnyhu/RAW-Pho
 Windows Blender 5.3.0、RTX 4090 的独立配置离线安装通过：全图端点（含显示抽样外像素）、HDR/负值/透明和半透明、恒定输入；CPU与GPU FULL实际EXR；上游曝光动态重算、后序隔离；跨照片复制适配及私有节点组；手动值、模式和保存重开；ACEScg/Rec709、PREMUL/STRAIGHT EXR与sRGB PNG的scope等于实际输入。真实窗口通过原生卡片按钮打开编辑器，拖黑白点、Auto切换、非活动目标绑定、取消和Undo。GPU AUTO Viewer三次实际输入对照的最大绝对误差分别为0.00069088、0.00128770、0.00069088，全部有限且在2e-3容差内；原位修改输入后直方图更新，静止后不再抓取。
 
 最终安装包SHA-256为 `49a793d90e637a47c43db890b360c37b19fae7eee43cf7f57fb01486d05d023f`。日志和截图保存在 `dist/beta7-validation/`，源码包含三个Auto Level永久测试；CI新增安装版CPU与工作色域检查。胶片原生二进制、材料数据和推荐配方未改动，本次未重跑全部胶片配对矩阵。Mac实际Metal验收仍待执行，不能把Windows通过或源码跨平台算作Mac通过；具体操作见 [beta.7 Mac交接](auto-level-beta7-mac-handoff.md)。
+
+## 2026-11-27 · Auto Level 负值抬灰修复（1.0.2-beta.8）
+
+用户提供同一画面的前后截图：启用beta.7后黑位升到约0.26显示亮度，卡片报告black=-0.055117、white=0.95018。旧公式把线性黑0映射为0.0548266，经过sRGB显示后形成明显灰雾。此前测试证明了渲染和无界min/max公式相符，却遗漏了“自动色阶不能把可见黑位抬灰”这条产品约束。
+
+查阅 [Adobe当前Auto校正文档](https://helpx.adobe.com/photoshop/desktop/adjust-color/color-corrections/apply-auto-tone-auto-contrast-and-auto-color.html)和 [GIMP Levels](https://docs.gimp.org/3.0/en/gimp-tool-levels.html)。Adobe区分共同通道的Auto Contrast和可能改变色偏的逐通道Auto Tone，并提供百分比尾部剪裁；GIMP提供输入端点及线性/感知处理选择。本实现继续使用共同RGB范围、线性工作色域和0%尾部剪裁。针对本编辑器的显示对比用途，新增明确约束：自动黑白点都钳制在0–1，负RGB不抬黑，超白RGB不压白；有效区间内斜率至少为1。剪裁仍可能合并范围外的细节，此约束不等于所有显示变换下的感知对比承诺。未实现Photoshop的百分位剪裁或自动白平衡。
+
+`levels_math.auto_points` 与原生图使用相同端点规则。`levels_ui` 的标记、Auto关闭转手动、输出histogram同步采用边界后的值；自动横轴固定0–1并把超界值计到边缘，手动端点可扩展范围。`levels_node.upgrade_tree` 给旧图的两个统计输出原位插入边界节点，保存graph_version=2；加载、导入、Undo/Redo和启用时升级。树、接口、节点UID、手动RNA和动画保留，后台旧工程首次渲染前完成迁移。
+
+回归新增独立黑白位约束、超界尾部幅度变化不影响可见中间调、手动负黑点仍可显式抬黑。`tests/fixtures/auto_level_beta7.blend` 由实际已发布beta.7安装版生成，仅包含合成EXR与两个卡片；原版实测0→0.054826587，升级后首次CPU/GPU渲染为0，手动范围和动画保持，重复升级不重复加节点。
+
+本地同名RAW以截图可见Portra800/Vision2383、Grain和CameraDiffusion设置近似重建，明确未取得用户完整配方。输入min=-0.05561984、max=0.77368838；旧公式0→0.06706775，746,890个暗部像素均值从0.00120329抬至0.06851871。新原生输出0保持0，暗部均值0.00155526，实际CPU导出与独立参考逐像素相同(max_abs=0)，Alpha不变。原片和衍生图仅留本地dist/auto-level-photo，公共包只含无照片的可复现测试脚本。
+
+最终ZIP SHA-256为 `bee15089aee7cf15d954daddab6eefa0f263cab039bed1d2e3ef05c23f473048`。Windows Blender5.3.0、RTX4090独立配置离线安装后，CPU完整Auto Level、色域、菜单与导出检查、GPU FULL黑白位及旧图迁移均通过。真实GPU AUTO Viewer负尾部测例max_abs=0.00062776，黑色实际像素严格为0；直方图标记、输入刷新、拖动、切换Auto、取消和Undo均通过。Mac实际Metal需按 [beta.8交接](auto-level-beta8-mac-handoff.md)实测；本次没有改变胶片二进制、材料数据或推荐配方。

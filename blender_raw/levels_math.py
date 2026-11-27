@@ -42,6 +42,19 @@ def points(black, white):
     return black, white
 
 
+def auto_points(low, high):
+    """Stretch the visible 0–1 interval without lifting black or pulling white down.
+
+    Negative film/grain values and scene-linear highlights above one are outside
+    the target display interval. Including them as endpoints normalizes HDR and
+    compresses visible contrast. Manual levels may still use an arbitrary range.
+    """
+    if not math.isfinite(low) or not math.isfinite(high):
+        return None
+    black, white = max(0., min(1., low)), max(0., min(1., high))
+    return (black, white) if white > black else None
+
+
 def analyze(rgba, max_values=1_000_000):
     """Measure every visible finite channel; sample only the histogram payload.
 

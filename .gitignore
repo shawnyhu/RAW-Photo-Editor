@@ -8,4 +8,5 @@ __pycache__/
 *.py[cod]
 *.blend
 !/blender_raw/assets/photo_workspace.blend
+!/tests/fixtures/auto_level_beta7.blend
 *.blend[0-9]*

@@ -17,6 +17,7 @@ ROOT_FILES = {
     "docs/spektrafilm-beta5-mac-handoff.md",
     "docs/spektrafilm-beta6-mac-handoff.md",
     "docs/auto-level-beta7-mac-handoff.md",
+    "docs/auto-level-beta8-mac-handoff.md",
 }
 STOCK_FILES = {
     "additional-stock-data.tar.gz", "pack_stock_data.py", "pack_stock_grain.py",

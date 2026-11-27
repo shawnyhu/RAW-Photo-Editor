@@ -4,13 +4,78 @@ import math
 
 import bpy
 import numpy as np
+from bpy.app.handlers import persistent
 from bpy.props import BoolProperty, FloatProperty
 
 from . import levels_math
 
 
 TYPE = 'BlenderRawAutoLevel'
+GRAPH_VERSION = 2
+VERSION_TAG = 'photo_levels_graph_version'
 _applying = False
+_migrating = False
+
+
+def upgrade_tree(tree):
+    """Bound automatic endpoints without rebuilding a saved private graph.
+
+    Negative grain/gamut values must not lift visible black, and super-white
+    values must not pull visible white down. Manual values stay unrestricted.
+    """
+    if (not tree or not tree.is_editable or tree.bl_idname != 'CompositorNodeTree'
+            or tree.get(VERSION_TAG, 1) >= GRAPH_VERSION):
+        return False
+    sources = (
+        ('Input Minimum', 'Minimum', 'Auto Black Bound', 'MAXIMUM', 0.0),
+        ('Input Maximum', 'Maximum', 'Auto White Bound', 'MINIMUM', 1.0),
+    )
+    # Leave unrelated or user-replaced graphs untouched. Known beta.7 graphs
+    # have these two reduction outputs; all their consumers must see the fix.
+    if any(not tree.nodes.get(name) or tree.nodes[name].bl_idname != 'CompositorNodeLevels'
+           or socket not in tree.nodes[name].outputs
+           or (tree.nodes.get(bound) and tree.nodes[bound].bl_idname != 'ShaderNodeMath')
+           for name, socket, bound, *_ in sources):
+        return False
+    for name, socket_name, bound_name, operation, limit in sources:
+        source = tree.nodes[name].outputs[socket_name]
+        bound = tree.nodes.get(bound_name)
+        if bound is None:
+            bound = tree.nodes.new('ShaderNodeMath')
+            bound.name = bound.label = bound_name
+            bound.location = (tree.nodes[name].location.x + 170.0, tree.nodes[name].location.y)
+        # Snapshot destinations before adding the new input link, which would
+        # otherwise be redirected back to the bound itself on a partial retry.
+        destinations = [link.to_socket for link in source.links if link.to_node != bound]
+        bound.operation, bound.use_clamp = operation, True
+        bound.inputs[1].default_value = limit
+        tree.links.new(source, bound.inputs[0])
+        for destination in destinations:
+            tree.links.new(bound.outputs[0], destination)
+    tree[VERSION_TAG] = GRAPH_VERSION
+    return True
+
+
+@persistent
+def migrate_graphs(*_args):
+    """Upgrade loaded/imported/undone beta.7 nodes before UI or worker renders."""
+    global _migrating
+    if _migrating or not hasattr(bpy.data, 'node_groups'):
+        return None
+    _migrating = True
+    try:
+        seen = set()
+        for owner in bpy.data.node_groups:
+            if owner.bl_idname != 'CompositorNodeTree':
+                continue
+            for node in owner.nodes:
+                if node.bl_idname != TYPE or not node.node_tree or node.node_tree in seen:
+                    continue
+                seen.add(node.node_tree)
+                upgrade_tree(node.node_tree)
+    finally:
+        _migrating = False
+    return None
 
 
 def make_tree():
@@ -110,6 +175,7 @@ def make_tree():
     result = mix('Automatic Constant Bypass', source.outputs['Image'], combine.outputs['Image'],
                  apply_range, 'RGBA', x=1700, y=200)
     link(result, output.inputs['Image'])
+    upgrade_tree(tree)
     return tree
 
 
@@ -117,6 +183,7 @@ def sync(node):
     tree = node.node_tree
     if not tree:
         return
+    upgrade_tree(tree)
     black, white = levels_math.points(node.black_point, node.white_point)
     tree.nodes['Manual Black'].outputs[0].default_value = black
     tree.nodes['Manual White'].outputs[0].default_value = white
@@ -250,7 +317,20 @@ class BR_NODE_auto_level(bpy.types.CompositorNodeCustomGroup):
 
 def register():
     bpy.utils.register_class(BR_NODE_auto_level)
+    for name in ('load_post', 'blend_import_post', 'undo_post', 'redo_post'):
+        getattr(bpy.app.handlers, name).append(migrate_graphs)
+    if hasattr(bpy.data, 'node_groups'):
+        migrate_graphs()
+    else:
+        # Extension enable can run with RestrictBlend over an existing file.
+        bpy.app.timers.register(migrate_graphs, first_interval=0.0)
 
 
 def unregister():
+    if bpy.app.timers.is_registered(migrate_graphs):
+        bpy.app.timers.unregister(migrate_graphs)
+    for name in ('load_post', 'blend_import_post', 'undo_post', 'redo_post'):
+        handlers = getattr(bpy.app.handlers, name)
+        if migrate_graphs in handlers:
+            handlers.remove(migrate_graphs)
     bpy.utils.unregister_class(BR_NODE_auto_level)

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2-beta.8 — 2026-11-27
+
+- Fixed Auto Level lifting black and washing out film images when grain or color processing produced negative RGB values. Automatic endpoints now stay within 0–1: negative values cannot lift black, and super-white values cannot pull white down. RGB channels still share one range. Manual negative/HDR endpoints remain available.
+- Existing beta.7 Auto Level cards upgrade in place when a project is opened, including background exports. Manual settings, animation and independent copies are preserved. Input/output histograms and Auto-to-Manual switching use the corrected endpoints.
+- Added actual black/white invariants, a synthetic project saved by beta.7, and real-photo regression support. Windows CPU/GPU checks cover the reported negative-tail failure; private photographic evidence is kept outside public packages.
+
 ## 1.0.2-beta.7 — 2026-11-27
 
 - Added **Adjust → Auto Level**. Auto is a persistent switch: the native compositor recomputes a shared RGB black/white range from each card's current input. Copies adapt to their destination photographs, and final exports analyze their full-resolution input.

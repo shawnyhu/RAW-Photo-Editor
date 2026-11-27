@@ -64,6 +64,7 @@ jobs:
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/native_install_smoke.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/adjust_effect_cards.py -- --installed
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/auto_level.py -- --installed
+          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/auto_level_black_floor.py -- --installed
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/auto_level_colorspace.py -- --installed
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/developer_meter_controls.py
           python3 tests/film_user_library.py
@@ -177,6 +178,8 @@ jobs:
           & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/adjust_effect_cards.py -- --installed
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/auto_level.py -- --installed
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/auto_level_black_floor.py -- --installed
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/auto_level_colorspace.py -- --installed
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

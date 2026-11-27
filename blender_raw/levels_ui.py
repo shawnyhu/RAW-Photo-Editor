@@ -9,7 +9,7 @@ from bpy.app.handlers import persistent
 from bpy.props import StringProperty
 import numpy as np
 
-from . import levels_node
+from . import levels_math, levels_node
 
 _cache = {}
 _interests = {}
@@ -40,17 +40,18 @@ def signature(scene, node):
 
 
 def points(node, sample):
-    if node.auto_level and sample and sample.high > sample.low:
-        return sample.low, sample.high
+    if node.auto_level:
+        return (levels_math.auto_points(sample.low, sample.high) if sample else None) or (0., 1.)
     return node.black_point, node.white_point
 
 
 def domain(sample, black, white):
-    return min(0., sample.low, black), max(1., sample.high, white)
+    # Auto uses the visible interval; manual endpoints can expand this axis.
+    return min(0., black), max(1., white)
 
 
 def histogram(values, limits, bins=256):
-    counts = np.histogram(values, bins=bins, range=limits)[0]
+    counts = np.histogram(np.clip(values, *limits), bins=bins, range=limits)[0]
     # Square-root height makes the tails visible without changing their x positions.
     return np.sqrt(counts / max(1, counts.max()))
 
@@ -58,7 +59,7 @@ def histogram(values, limits, bins=256):
 def distributions(node, sample, bins=256):
     black, white = points(node, sample)
     limits = domain(sample, black, white)
-    output = (sample.values if node.auto_level and sample.high <= sample.low else
+    output = (sample.values if node.auto_level and levels_math.auto_points(sample.low, sample.high) is None else
               np.clip((sample.values.astype(np.float64) - black) / (white - black), 0., 1.))
     return histogram(sample.values, limits, bins), histogram(output, (0., 1.), bins), limits
 
@@ -248,8 +249,8 @@ def draw(layout, node, context):
     else:
         layout.prop(node, 'black_point')
         layout.prop(node, 'white_point')
-    if sample and node.auto_level and sample.high <= sample.low:
-        layout.label(text='Uniform input — kept unchanged', icon='INFO')
+    if sample and node.auto_level and levels_math.auto_points(sample.low, sample.high) is None:
+        layout.label(text='No visible range — kept unchanged', icon='INFO')
     row = layout.row(); row.enabled = False
     row.label(text='Linear RGB · Input preview scope')
 
@@ -265,10 +266,7 @@ def _target(op):
 def _toggle(scene, node):
     if node.auto_level:
         sample = current(scene, node)
-        if sample.high > sample.low:
-            levels_node.apply_points(node, sample.low, sample.high)
-        else:
-            node.auto_level = False
+        levels_node.apply_points(node, *(levels_math.auto_points(sample.low, sample.high) or (0., 1.)))
     else:
         node.auto_level = True
 

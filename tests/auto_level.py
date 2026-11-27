@@ -37,7 +37,7 @@ def reference(rgba, black=None, white=None):
     rgb[alpha[..., 0] == 0] = 0
     if black is None:
         visible = rgb[alpha[..., 0] > 1e-6]
-        black, white = visible.min(), visible.max()
+        black, white = max(0., min(1., float(visible.min()))), max(0., min(1., float(visible.max())))
         if white <= black:
             return np.array(rgba, copy=True)
     rgb[:] = np.clip((rgb - black) / (white - black), 0, 1) * alpha
@@ -161,7 +161,9 @@ def actual_pixels(folder):
     close((sample.low, sample.high), (-.25, 2), 'full compositor input measurement')
     assert (sample.width, sample.height) == (37, 23)
     upstream.inputs['Exposure'].default_value = 1
-    close(render(folder, 'native-auto-exposure', photo, scene), reference(pixels), 'live upstream exposure')
+    brighter = pixels.copy()
+    brighter[..., :3] *= 2
+    close(render(folder, 'native-auto-exposure', photo, scene), reference(brighter), 'live upstream exposure')
     sample = levels_node.capture(scene, node)
     close((sample.low, sample.high), (-.5, 4), 'updated upstream measurement')
     downstream = native_effects.create_effect(scene, 'CompositorNodeExposure')

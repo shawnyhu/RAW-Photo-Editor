@@ -126,6 +126,33 @@ def run():
         print('PASS input histogram follows in-place pixels and stays idle without captures',flush=True)
     finally:
         levels.capture=capture
+    # Film/grain may produce negative values outside the visible histogram.
+    # They must never shift actual GPU Viewer black away from zero.
+    signed=pixels.copy()
+    signed[:,:,:3]=np.linspace(0.,.95018,512,dtype=np.float32)[None,:,None]
+    signed[:,:,:3]*=signed[:,:,3:4]
+    signed[0,0,:3]=-.055117
+    image.pixels.foreach_set(signed.ravel());image.update();image.update_tag()
+    yield from helpers['viewer_pixels_matches'](scene,helpers['reference'](signed))
+    for _ in range(30):
+        yield
+        sample=ui._cache[ui.key(target)].sample
+        if sample and sample.low<-.05:
+            break
+    sample=ui._cache[ui.key(target)].sample
+    assert sample.low<-.05 and ui.points(target,sample)[0]==0.
+    assert abs(ui.points(target,sample)[1]-.95018)<1e-5
+    viewer=addon.compositor.viewer_image()
+    actual=np.asarray(viewer.pixels[:],dtype=np.float32).reshape(96,512,4)
+    np.testing.assert_array_equal(actual[1:,0,:3],0.)
+    print('PASS negative film tail keeps actual GPU AUTO black at zero and histogram marker at zero',flush=True)
+    image.pixels.foreach_set(pixels.ravel());image.update();image.update_tag()
+    yield from helpers['viewer_pixels_matches'](scene,helpers['reference'](pixels))
+    for _ in range(30):
+        yield
+        sample=ui._cache[ui.key(target)].sample
+        if sample and abs(sample.low-.12)<1e-5:
+            break
     with bpy.context.temp_override(window=window,area=area,region=region):
         bpy.ops.ed.undo_push(message='Levels UI fixture')
     # Enter from the actual card button while a different card is active.
