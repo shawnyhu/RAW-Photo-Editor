@@ -1,242 +1,52 @@
-name: Extension release
-on:
-  pull_request:
-    branches: [main]
-    paths: ['blender_raw/**', 'tests/**', '.github/workflows/release.yml', 'CHANGELOG.md']
-  push:
-    branches: [main]
-    paths: ['blender_raw/blender_manifest.toml']
-  workflow_dispatch:
-    inputs:
-      macos_runner:
-        description: Apple Silicon runner for this validation
-        type: choice
-        default: macos-15
-        options: [macos-15, macos-26]
+name: Publish verified editor beta
+on: workflow_dispatch
 permissions:
-  contents: read
+  contents: write
+  actions: read
 jobs:
-  decoder:
-    uses: ./.github/workflows/prepare-decoder.yml
-  install-and-test:
-    needs: decoder
-    runs-on: ${{ inputs.macos_runner || 'macos-15' }}
-    timeout-minutes: 20
-    outputs:
-      digest: ${{ steps.upload.outputs.artifact-digest }}
-      version: ${{ steps.build.outputs.version }}
-      filename: ${{ steps.build.outputs.filename }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: verified-rawpy-wheel
-          path: blender_raw/wheels
-      - name: Mount verified Blender 5.3.0 for Apple Silicon
-        run: |
-          set -euo pipefail
-          test "$(uname -m)" = arm64
-          dmg="$RUNNER_TEMP/blender.dmg"
-          curl --fail --silent --show-error --location --retry 3 --output "$dmg" https://download.blender.org/release/Blender5.3/blender-5.3.0-macos-arm64.dmg
-          printf '%s  %s\n' 2d802b54766741e612cead50b03ebbc8eb64dadc71eda932573d256b8a784720 "$dmg" | shasum -a 256 -c -
-          mount="$RUNNER_TEMP/blender-dmg"
-          hdiutil attach -readonly -nobrowse -mountpoint "$mount" "$dmg"
-          mkdir -p "$RUNNER_TEMP/blender-profile" "$RUNNER_TEMP/validation"
-          echo "BLENDER=$mount/Blender.app/Contents/MacOS/Blender" >> "$GITHUB_ENV"
-          echo "BLENDER_USER_RESOURCES=$RUNNER_TEMP/blender-profile" >> "$GITHUB_ENV"
-
-      - name: Build the release ZIP and install offline
-        id: build
-        run: |
-          set -euo pipefail
-          version=$(python3 -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('blender_raw/blender_manifest.toml').read_text(encoding='utf-8'))['version'])")
-          package="$RUNNER_TEMP/validation/raw_photo_editor-$version.zip"
-          "$BLENDER" -b --factory-startup --offline-mode --command extension build --source-dir blender_raw --output-filepath "$package"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "filename=$(basename "$package")" >> "$GITHUB_OUTPUT"
-          "$BLENDER" -b --factory-startup --offline-mode --command extension install-file --repo user_default --enable "$package"
-
-      - name: Verify the installed extension and batch image settings
-        run: |
-          set -euo pipefail
-          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/native_install_smoke.py
-          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/adjust_effect_cards.py -- --installed
-          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/developer_meter_controls.py
-          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/batch_export_format.py -- --installed
-          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/import_batch_paths.py
-          "$BLENDER" -b --factory-startup --offline-mode --python-exit-code 1 --python tests/preview_scheduling.py
-          "$BLENDER" -b --factory-startup --offline-mode --python-exit-code 1 --python tests/native_source_binding.py
-      - name: Exercise installed crop node and pixel output
-        shell: bash
-        run: |
-          set -euo pipefail
-          "$BLENDER" -b --factory-startup --offline-mode --python-exit-code 1 --python tests/crop_detection_confidence.py
-          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/crop_axis_geometry.py
-          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/crop_perspective.py
-      - name: Drag crop and perspective handles in a Blender window
-        shell: bash
-        run: |
-          set -euo pipefail
-          "$BLENDER" --offline-mode --enable-event-simulate --window-geometry 30 30 1000 720 --python-exit-code 1 --python tests/crop_perspective_ui.py -- "$RUNNER_TEMP/crop-ui-passed"
-          test -f "$RUNNER_TEMP/crop-ui-passed"
-      - name: Verify the color cards and viewer background in a Blender window
-        shell: bash
-        run: |
-          set -euo pipefail
-          "$BLENDER" --offline-mode --window-geometry 30 30 1200 850 --python-exit-code 1 --python tests/adjust_effect_cards.py -- --installed --ui
-          "$BLENDER" --offline-mode --enable-event-simulate --window-geometry 30 30 1200 850 --python-exit-code 1 --python tests/viewer_background_ui.py -- "$RUNNER_TEMP/viewer-background" --installed
-          test -f "$RUNNER_TEMP/viewer-background/passed"
-      - name: Audit the installer and produce matching source without prior history
-        run: |
-          version="${{ steps.build.outputs.version }}"
-          python3 tools/verify_distribution.py "$RUNNER_TEMP/validation/${{ steps.build.outputs.filename }}" "$RUNNER_TEMP/raw_photo_editor-source-$version.zip"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: raw_photo_editor-source-${{ steps.build.outputs.version }}.zip
-          archive: false
-          path: ${{ runner.temp }}/raw_photo_editor-source-*.zip
-          if-no-files-found: error
-          retention-days: 90
-      - uses: actions/upload-artifact@v7
-        id: upload
-        with:
-          archive: false
-          path: ${{ runner.temp }}/validation/*.zip
-          if-no-files-found: error
-          retention-days: 90
-  windows:
-    needs: install-and-test
-    runs-on: windows-2025
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@v8
-        with:
-          name: ${{ needs.install-and-test.outputs.filename }}
-          skip-decompress: true
-          path: dist-release
-      - name: Provide OpenGL for Blender's photo-scene render preflight on a GPU-less runner
-        uses: ssciwr/setup-mesa-dist-win@2dfeaebfa514f74c2b8cd8d27108c31486d33e72
-        with:
-          version: '26.0.3'
-          deployment-choice: '1'
-      - name: Install the same package and test crop output on Windows
-        shell: pwsh
-        env:
-          INSTALLER_DIGEST: ${{ needs.install-and-test.outputs.digest }}
-        run: |
-          $archive = "$env:RUNNER_TEMP/blender.zip"
-          curl.exe --fail --silent --show-error --location --retry 3 --output $archive 'https://download.blender.org/release/Blender5.3/blender-5.3.0-windows-x64.zip'
-          if ($LASTEXITCODE -ne 0 -or (Get-FileHash $archive).Hash -ne '3ac567a63d59d9934f7b9213bfb27ba05760e1fb366f8f55c381573ec3eabfa8') { throw 'Blender download verification failed' }
-          7z x -bso0 -bsp0 "-o$env:RUNNER_TEMP" $archive
-          if ($LASTEXITCODE -ne 0) { throw 'Blender unzip failed' }
-          $blender = "$env:RUNNER_TEMP/blender-5.3.0-windows-x64/blender.exe"
-          $env:BLENDER_USER_RESOURCES = (New-Item -ItemType Directory "$env:RUNNER_TEMP/profile").FullName
-          $files = @(Get-ChildItem dist-release -File -Recurse)
-          if ($files.Count -ne 1) { throw 'Expected a single Blender installer' }
-          $package = $files[0].FullName
-          if ((Get-FileHash $package).Hash -ne $env:INSTALLER_DIGEST) { throw 'Installer digest mismatch' }
-          & $blender -b --factory-startup --offline-mode --command extension install-file --repo user_default --enable $package
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/native_install_smoke.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/adjust_effect_cards.py -- --installed
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & $blender -b --offline-mode --python-exit-code 1 --python tests/developer_meter_controls.py
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/batch_export_format.py -- --installed
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $blender -b --offline-mode --python-exit-code 1 --python tests/import_batch_paths.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $blender -b --factory-startup --offline-mode --python-exit-code 1 --python tests/preview_scheduling.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $blender -b --factory-startup --offline-mode --python-exit-code 1 --python tests/native_source_binding.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $blender -b --factory-startup --offline-mode --python-exit-code 1 --python tests/crop_detection_confidence.py
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & $blender -b --offline-mode --python-exit-code 1 --python tests/crop_axis_geometry.py
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & $blender -b --gpu-backend opengl --offline-mode --python-exit-code 1 --python tests/crop_perspective.py
-          $testExitCode = $LASTEXITCODE
-          if ($testExitCode -ne 0) {
-            Get-ChildItem $env:TEMP -Filter '*.crash.txt' | ForEach-Object { Get-Content -LiteralPath $_.FullName -Tail 55 }
-          }
-          exit $testExitCode
-
   publish:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Release v')
-    needs: [install-and-test, windows]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency: publish-extension-release
+    timeout-minutes: 6
     env:
-      VERSION: ${{ needs.install-and-test.outputs.version }}
-      PACKAGE: ${{ needs.install-and-test.outputs.filename }}
-      DIGEST: ${{ needs.install-and-test.outputs.digest }}
+      GH_TOKEN: ${{ github.token }}
+      VERIFIED_RUN: '45929583156'
+      RELEASE_SHA: fdee77629977c742537c9d602d923e073870c9c5
+      VERSION: 1.0.2-beta.3
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           persist-credentials: false
+      - name: Check the source and validation result
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN" |
+            jq -e --arg sha "$RELEASE_SHA" '.head_sha == $sha and .conclusion == "success" and .path == ".github/workflows/release.yml"'
       - uses: actions/download-artifact@v8
         with:
-          name: ${{ env.PACKAGE }}
+          run-id: ${{ env.VERIFIED_RUN }}
+          github-token: ${{ github.token }}
+          name: raw_photo_editor-${{ env.VERSION }}.zip
           skip-decompress: true
           path: dist-release
       - uses: actions/download-artifact@v8
         with:
+          run-id: ${{ env.VERIFIED_RUN }}
+          github-token: ${{ github.token }}
           name: raw_photo_editor-source-${{ env.VERSION }}.zip
           skip-decompress: true
           path: dist-release
-      - name: Publish the tested ZIP, corresponding source and checksums
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Compare both CI digests and publish the tested installer
+        working-directory: dist-release
         run: |
           set -euo pipefail
-          tag="v$VERSION"
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          test "$(git show -s --format=%s HEAD)" = "Release $tag"
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          python3 - <<'PY'
-          import os, pathlib, re
-          version = re.escape(os.environ['VERSION'])
-          log = pathlib.Path('CHANGELOG.md').read_text()
-          section = re.search(rf'^## {version} — [^\n]+\n\n(.+?)(?=^## |\Z)', log, re.M | re.S)
-          if not section:
-              raise SystemExit('Missing changelog entry for the stable version')
-          pathlib.Path('release-notes.md').write_text(section[1].strip() + '\n')
-          PY
-          cd dist-release
-          printf '%s  %s\n' "$DIGEST" "$PACKAGE" > "$PACKAGE.sha256"
-          src="raw_photo_editor-source-$VERSION.zip"
-          sha256sum "$src" > "$src.sha256"
-          sha256sum -c "$PACKAGE.sha256" "$src.sha256"
-          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-            test "$(git rev-list -1 "$tag")" = "$GITHUB_SHA"
-          fi
-          if gh release view "$tag" --json isDraft,targetCommitish > "$RUNNER_TEMP/existing-release.json"; then
-            if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-              test "$(jq -r .targetCommitish "$RUNNER_TEMP/existing-release.json")" = "$GITHUB_SHA"
-            fi
-          else
-            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "RAW Photo Editor $VERSION" --notes-file ../release-notes.md
-          fi
-          # Complete an interrupted draft without ever overwriting a published asset.
-          for file in "$PACKAGE" "$PACKAGE.sha256" "$src" "$src.sha256"; do
-            existing=$(gh release view "$tag" --json assets --jq ".assets[] | select(.name == \"$file\") | .digest")
-            if [[ -n "$existing" ]]; then
-              test "$existing" = "sha256:$(sha256sum "$file" | cut -d' ' -f1)"
-            else
-              test "$(gh release view "$tag" --json isDraft --jq '.isDraft')" = true
-              gh release upload "$tag" "$file"
-            fi
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN/artifacts" > "$RUNNER_TEMP/assets.json"
+          installer="raw_photo_editor-$VERSION.zip"
+          source="raw_photo_editor-source-$VERSION.zip"
+          for name in "$installer" "$source"; do
+            expected=$(jq -er --arg name "$name" '.artifacts[] | select(.name==$name and (.expired|not)) | .digest' "$RUNNER_TEMP/assets.json")
+            digest=$(sha256sum "$name" | cut -d' ' -f1)
+            test "sha256:$digest" = "$expected"
+            printf '%s  %s\n' "$digest" "$name" > "$name.sha256"
+            unzip -tq "$name"
           done
-          if [[ "$(gh release view "$tag" --json isDraft --jq '.isDraft')" == true ]]; then
-            gh release edit "$tag" --draft=false --prerelease=false --latest
-          fi
+          gh release create "v$VERSION" "$installer" "$installer.sha256" "$source" "$source.sha256" --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SHA" --prerelease --latest=false --title "RAW Photo Editor $VERSION" --notes-file ../beta-notes.md
