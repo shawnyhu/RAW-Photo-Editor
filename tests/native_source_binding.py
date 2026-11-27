@@ -118,6 +118,9 @@ def check_render_only_controls(photo):
         def label(self, *, text, **_kwargs):
             self.labels.append(text)
 
+        def separator(self):
+            pass
+
     shown = []
     layout = Layout()
     with patch.object(catalog, "draw_develop", side_effect=lambda _layout, _node, source: shown.append(source.uid)), \
