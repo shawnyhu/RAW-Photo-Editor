@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import bpy
 
-from . import crop_editor, viewer_background
+from . import crop_editor, levels_node, levels_ui, viewer_background
 from . import catalog, compositor, film_preview, filters, gallery, jobs, native_effects, node_recovery, node_status, operators
 
 
@@ -10,6 +10,8 @@ def register():
         raise RuntimeError('Disable the other copy of the photo editor in Preferences before enabling this extension.')
     catalog.register()
     crop_editor.register()
+    levels_node.register()
+    levels_ui.register()
     compositor.register()
     operators.register()
     native_effects.register()
@@ -35,5 +37,7 @@ def unregister():
     gallery.unregister()
     operators.unregister()
     compositor.unregister()
+    levels_ui.unregister()
+    levels_node.unregister()
     crop_editor.unregister()
     catalog.unregister()

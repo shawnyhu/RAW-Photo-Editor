@@ -55,3 +55,11 @@ Right-click a source thumbnail and choose **Copy Adjustments**. Select the desti
 The export dialog applies its format, quality and channel settings to the selection. **Follow Scene** uses each photo’s view settings. Export workers decode full-resolution originals independently of preview caches.
 
 Keep linked originals available or enable **Embed Originals** when portability matters. **Pack Cache Images** controls whether decoded previews travel inside the project. To revisit the previous single-tree format used in 0.18.x and earlier, use its matching historical release.
+
+## Auto Level
+
+Choose **Add Scene Effect → Adjust → Auto Level**. The switch starts enabled. It finds a common RGB black and white point from the whole image arriving at this card, then maps that range to 0–1. Put it after the effects whose result you want to stretch. Changing earlier effects recalculates the range; later effects do not affect its measurement. Copying an enabled Auto Level card to another photo adapts to that photo automatically.
+
+The card shows the **input histogram above the output histogram**, with black/white markers on the input. Choose **Edit Histogram** to drag either marker. Dragging turns Auto off and preserves the other endpoint. **Done** or Enter accepts the edit; Esc cancels it. In Manual, the Black Point and White Point fields also accept precise values. Turn Auto back on to resume automatic adjustment.
+
+The horizontal scale is linear RGB in the project's working color space. Histogram heights use a square-root display so sparse tails remain visible. Scopes show the current preview input; exports recompute Auto from their full-resolution input, so isolated extrema lost in a reduced preview can change the final endpoints. Manual endpoints remain fixed at every resolution. Alpha stays unchanged, transparent pixels are excluded from the range, and uniform or fully transparent inputs remain unchanged in Auto. Values beyond manually selected endpoints clip to black or white.

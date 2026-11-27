@@ -150,7 +150,7 @@ def _capture_scene(scene, root, mode='RENDER'):
         yield
 
 
-def _capture(scene, root, node, parents, folder, mode='RENDER'):
+def _capture(scene, root, node, parents, folder, mode='RENDER', *, colorspace='Linear Rec.709'):
     links = active_input_links(node.inputs['Image'])
     if not links:
         raise ValueError(f'Connect an image to {node.name} before rendering film')
@@ -196,7 +196,7 @@ def _capture(scene, root, node, parents, folder, mode='RENDER'):
         fmt.media_type, fmt.file_format = 'IMAGE', 'OPEN_EXR'
         fmt.exr_codec, fmt.color_depth, fmt.color_mode = 'NONE', '32', 'RGBA'
         fmt.color_management = 'OVERRIDE'
-        fmt.linear_colorspace_settings.name = 'Linear Rec.709'
+        fmt.linear_colorspace_settings.name = colorspace
         sink.save_as_render = True
         sink.file_output_items.new('RGBA', 'input')
         connect(center.outputs['Image'], sink.inputs[0])

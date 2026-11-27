@@ -57,7 +57,7 @@ def menus():
     fake.layout = MenuLayout()
     native_effects.BR_MT_adjust_effects.draw(fake, None)
     items = fake.layout.items
-    assert [op.text for op in items] == ['Brightness/Contrast', 'Color Balance', 'Color Correction', 'Exposure',
+    assert [op.text for op in items] == ['Auto Level', 'Brightness/Contrast', 'Color Balance', 'Color Correction', 'Exposure',
                                          'Gamma', 'Hue Correct', 'Hue/Saturation/Value', 'RGB Curves', 'Tonemap']
     return items
 

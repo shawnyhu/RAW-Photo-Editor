@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Native compositor nodes exposed by the Adjust scene-effect menu."""
+"""Compositor nodes exposed by the Adjust scene-effect menu."""
+from . import levels_node
 
 
 NODES = {
+    levels_node.TYPE: 'Auto Level',
     'CompositorNodeBrightContrast': 'Brightness/Contrast',
     'CompositorNodeColorBalance': 'Color Balance',
     'CompositorNodeColorCorrection': 'Color Correction',
@@ -21,6 +23,11 @@ def image_socket(sockets, kind):
 
 
 def draw(layout, node):
+    if node.bl_idname == levels_node.TYPE:
+        from . import levels_ui
+        import bpy
+        levels_ui.draw(layout, node, bpy.context)
+        return
     # Blender 5.3's generic template draws every Tonemap input, including
     # the ones the chosen algorithm never evaluates.
     if node.bl_idname == 'CompositorNodeTonemap' and not node.inputs['Type'].is_linked:

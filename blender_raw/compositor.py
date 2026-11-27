@@ -11,7 +11,7 @@ import bpy
 from bpy.app.handlers import persistent
 from bpy.props import BoolProperty, EnumProperty, FloatProperty, FloatVectorProperty, PointerProperty, StringProperty
 
-from . import crop_node
+from . import crop_node, levels_node
 from . import catalog, film_display, film_node, metering, spektrafilm_engine, spot_meter
 
 
@@ -1309,7 +1309,7 @@ def _retain_legacy_groups(_filepath):
         if tree.bl_idname != "CompositorNodeTree" or tree.library:
             continue
         for node in tree.nodes:
-            if node.bl_idname in (READER_TYPE, DEVELOPER_TYPE, crop_node.TYPE, *film_node.FILM_TYPES):
+            if node.bl_idname in (READER_TYPE, DEVELOPER_TYPE, crop_node.TYPE, levels_node.TYPE, *film_node.FILM_TYPES):
                 group = node.node_tree
                 if group in missing_users and not group.use_extra_user:
                     group.use_extra_user = True

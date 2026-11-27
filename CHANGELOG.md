@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2-beta.7 — 2026-11-27
+
+- Added **Adjust → Auto Level**. Auto is a persistent switch: the native compositor recomputes a shared RGB black/white range from each card's current input. Copies adapt to their destination photographs, and final exports analyze their full-resolution input.
+- The card displays input and output histograms. **Edit Histogram** provides draggable black/white points over the input distribution. Dragging switches to Manual and keeps the other endpoint; turn Auto back on to resume automatic adjustment. Mode and manual values support copying, Undo and saving with the project.
+- Transparent pixels do not determine the automatic range. Alpha is preserved, and uniform or fully transparent inputs pass through unchanged in Auto. Scopes show linear RGB from the current preview; automatic processing measures every pixel of the actual render input.
+
 ## 1.0.2-beta.6 — 2026-11-27
 
 - Film and Print now open brand-column menus with readable stock names and the current selection marked. Print choices are filtered to supported materials for the selected film.

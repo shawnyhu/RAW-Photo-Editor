@@ -143,3 +143,17 @@ Windows 最终安装包 SHA-256 为 `f78629f4be4f0630856470d55feaf3e819e803e8ae2
 独立 Windows 完整重建与现有产物逐字一致，DLL SHA-256 为 `3a655f7e89d1688090c527eac743729ce8315b7df4356818f709ed9e6c8ba90f`；Vulkan 全幅/分块对照 max_abs、rms 和接缝误差均为 0。永久源模型测试通过 1450 个原彩色数组、10 个黑白材料及独立 RMS 反算。
 
 Apple Silicon 最终 [CI 构建 45967123111](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45967123111) 在 macOS 26.7.2 完成 arm64 编译、严格代码签名、64/14 原生校准与 Metal 3.0 离线编译。dylib SHA-256 为 `be004f5491f3562af62bf1705c1b5f2cce73ef90e8158fb4379ede613156344f`，同组 Metal 内核为 `cc8f3ad6b2f36a862b1dae61f8a2ccbe04c1921a43dc181ffb1f2626f6c3227b`。数据包、模型 patch、推荐 JSON 摘要与 Windows 完全相同。早期 CI 分别遇到 Python 3.15 与固定 Colour 依赖不兼容、旧 macOS SDK 缺少计时 API，改为 Python 3.13 和 beta.5 已使用的 macOS 26 SDK 后通过。**本版实际 Metal GPU 像素尚待用户 Mac 按交接 prompt 验收**，本条不把编译成功计作实际 Metal 渲染通过。
+
+## 2026-11-27 · 自动适配输入的 Auto Level（1.0.2-beta.7）
+
+用户需要把全图分布两端拉到黑白，并能在输入 histogram 上微调。最终交互使用持续 Auto 开关：复制卡片到其他照片时，原生图按各自输入重新计算。手动拖动黑白点会关闭 Auto 并保留另一端；重新开启恢复动态计算。卡片显示输入/输出两张直方图，Edit Histogram 打开可直接拖动的编辑器，Done/Enter 接受、Esc 取消、Undo 撤销。设置保存到项目。
+
+`levels_node.py` 使用 Blender 5.3 原生全图 Levels 统计、Math 与 Mix 节点。RGB 先去预乘，共用全图黑白点，按 `(RGB-black)/(white-black)` 映射并钳制0–1，再恢复 Alpha。统计排除 alpha<=1e-6；全透明和所有有效RGB值相同的输入自动旁路。Auto 的输入来自当前效果栈，前序处理参与统计，后序不参与；预览与全尺寸导出各自计算，手动值固定。复制隔离、重置和保存保活均接入现有原生卡片机制。
+
+早期 CPU 验证通过后，GPU 验证发现固定 float-max 透明像素哨兵失效。改用输入自身的全局上下界替换透明像素，再统计有效范围，避免 GPU 半精度中间纹理溢出。统计前先屏蔽不可见 RGB，避免隐藏RGB除以极小Alpha溢出。此问题说明 CPU FULL 通过不能替代实际 GPU AUTO Viewer。
+
+`levels_math.py` 对全图逐块计算真实端点，仅限制直方图显示样本为约一百万值。`levels_ui.py` 用当前输入绘制线性工作色域直方图，纵轴平方根压缩以显示稀疏尾部；自动处理不依赖这些显示样本。原生重合成和Image更新使不可复用输入的scope失效，抓取期间屏蔽自身通知；空闲窗口不轮询全图。删除照片、Undo/Redo、文件重载会清理失效引用。`film_preview._signature` 新增只跟踪输入的可选分支，原胶片默认路径保持。`film_bake._capture` 新增可选输出色域，默认仍为Linear Rec.709；Auto使用当前工作色域。直达图像采样仅允许同色域float PREMUL RGBA，其他路径实际合成，包含Alpha输出转灰度、STRAIGHT EXR和sRGB PNG。
+
+Windows Blender 5.3.0、RTX 4090 的独立配置离线安装通过：全图端点（含显示抽样外像素）、HDR/负值/透明和半透明、恒定输入；CPU与GPU FULL实际EXR；上游曝光动态重算、后序隔离；跨照片复制适配及私有节点组；手动值、模式和保存重开；ACEScg/Rec709、PREMUL/STRAIGHT EXR与sRGB PNG的scope等于实际输入。真实窗口通过原生卡片按钮打开编辑器，拖黑白点、Auto切换、非活动目标绑定、取消和Undo。GPU AUTO Viewer三次实际输入对照的最大绝对误差分别为0.00069088、0.00128770、0.00069088，全部有限且在2e-3容差内；原位修改输入后直方图更新，静止后不再抓取。
+
+最终安装包SHA-256为 `49a793d90e637a47c43db890b360c37b19fae7eee43cf7f57fb01486d05d023f`。日志和截图保存在 `dist/beta7-validation/`，源码包含三个Auto Level永久测试；CI新增安装版CPU与工作色域检查。胶片原生二进制、材料数据和推荐配方未改动，本次未重跑全部胶片配对矩阵。Mac实际Metal验收仍待执行，不能把Windows通过或源码跨平台算作Mac通过；具体操作见 [beta.7 Mac交接](auto-level-beta7-mac-handoff.md)。

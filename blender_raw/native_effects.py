@@ -12,7 +12,7 @@ import bpy
 from bpy.app.handlers import persistent
 from bpy.props import StringProperty
 
-from . import adjust_effects, catalog, compositor, crop_node, film_node
+from . import adjust_effects, catalog, compositor, crop_node, film_node, levels_node
 
 
 KIND_TAG = "photo_editor_native_effect"
@@ -230,7 +230,8 @@ def _ui_uninstall():
 
 
 def _processing_types():
-    return {compositor.READER_TYPE, compositor.DEVELOPER_TYPE, crop_node.TYPE, *film_node.FILM_TYPES}
+    return {compositor.READER_TYPE, compositor.DEVELOPER_TYPE, crop_node.TYPE, levels_node.TYPE,
+            *film_node.FILM_TYPES}
 
 
 def _has_processing(tree, memo=None, ancestors=()):
@@ -614,13 +615,16 @@ class BR_OT_reset_native_effect(bpy.types.Operator):
         effect = (context.scene.compositor_effects.get(self.effect_name) if self.effect_name
                   else context.scene.compositor_effects.active)
         node = effect_node(effect)
-        if not node or node.bl_idname in adjust_effects.NODES or node.bl_idname == compositor.READER_TYPE:
+        if (not node or node.bl_idname == compositor.READER_TYPE
+                or node.bl_idname in adjust_effects.NODES and node.bl_idname != levels_node.TYPE):
             return {'CANCELLED'}
         if node.bl_idname == compositor.DEVELOPER_TYPE:
             compositor.reset_developer(node, context)
             set_input_value(effect, 'Exposure', 0.0)
         elif node.bl_idname == crop_node.TYPE:
             crop_node.reset(node, context)
+        elif node.bl_idname == levels_node.TYPE:
+            levels_node.reset(node, context)
         else:
             film_node.reset_recipe(node)
         return {'FINISHED'}
@@ -657,7 +661,8 @@ class BR_PT_native_effect_controls(bpy.types.Panel):
             return
         effect = self.custom_data
         node = effect_node(effect)
-        if node and node.bl_idname not in adjust_effects.NODES and node.bl_idname != compositor.READER_TYPE:
+        if (node and node.bl_idname != compositor.READER_TYPE
+                and (node.bl_idname not in adjust_effects.NODES or node.bl_idname == levels_node.TYPE)):
             self.layout.operator(BR_OT_reset_native_effect.bl_idname, text='',
                                  icon='LOOP_BACK', emboss=False).effect_name = effect.name
 
@@ -682,6 +687,9 @@ class BR_PT_native_effect_controls(bpy.types.Panel):
                      for other in scene.compositor_effects)
         if owners > 1:
             layout.label(text='Preparing independent effect controls…', icon='INFO')
+            return
+        if node.bl_idname == levels_node.TYPE:
+            node.draw_buttons(context, layout)
             return
         if node.bl_idname in adjust_effects.NODES:
             adjust_effects.draw(layout, node)

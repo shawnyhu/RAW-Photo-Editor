@@ -114,7 +114,7 @@ _TRACKED_NODE_DATA = {p.identifier for p in bpy.types.Node.bl_rna.properties} | 
     'node_tree', 'image', 'image_user', 'color_ramp', 'mapping'}
 
 
-def _signature(node, scene, parents=()):
+def _signature(node, scene, parents=(), *, inputs_only=False):
     """Track the connected branch; never include a film node's own cached result."""
     from . import compositor, film_node
     visited = set()
@@ -262,7 +262,10 @@ def _signature(node, scene, parents=()):
             if socket.enabled:
                 visit_socket(socket, path, effect)
 
-    visit(node, parents, effect=owner_effect)
+    if inputs_only:
+        visit_inputs(node, parents, owner_effect)
+    else:
+        visit(node, parents, effect=owner_effect)
     return (sha256(repr(state).encode('utf-8')).hexdigest(), reusable), missing_raw
 
 
