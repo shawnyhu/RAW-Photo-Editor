@@ -15,11 +15,14 @@ def build():
     dylib = "libphoto_film.dylib"
     with TemporaryDirectory(prefix="photo-spektrafilm-build-") as temporary:
         root = Path(temporary)
-        for name in ("core-source.tar.gz", "additional-stock-data.tar.gz"):
+        # Extract both backends so the common B&W data/model patch is identical
+        # on Metal and Vulkan; only the Metal backend is compiled below.
+        for name in ("core-source.tar.gz", "vulkan-source.tar.gz", "additional-stock-data.tar.gz"):
             with tarfile.open(vendor / name) as archive:
                 archive.extractall(root, filter="data")
         subprocess.run(["patch", "-p1", "-i", str(vendor / "extension.patch")], cwd=root, check=True)
         subprocess.run(["patch", "-p1", "-i", str(vendor / "stock-tables.patch")], cwd=root, check=True)
+        subprocess.run(["patch", "-p1", "-i", str(vendor / "bw-stock-model.patch")], cwd=root, check=True)
         subprocess.run([sys.executable, "tools/generate_profile_curves.py",
                         "--output", "SpektraGeneratedProfileCurves.cpp",
                         "--counts-output", "SpektraGeneratedProfileCounts.h",

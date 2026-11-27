@@ -1,3 +1,52 @@
+2026-11-27 — Beta.6 B&W materials and film-selection recommendations
+
+The existing 56 colour film and 12 colour print indices, profile bytes,
+neutral filters, DIR defaults and 36 added-colour-film grain areas are retained.
+Eight B&W films follow them: Kodak Double-X 5222; Kodak Tri-X Reversal 7266;
+Ilford HP5 Plus, FP4 Plus and Delta 3200; Kodak T-Max 100; Fujifilm Acros II;
+and experimental Kodak Tri-X 400 in D-76, 8 minutes at 20 C. Kodak 2302 and
+experimental Ilford Multigrade RC Deluxe grade 2 follow the existing prints.
+All ten source JSONs are copied from Negs 2f5b570 without numerical edits.
+Their individual CC BY-SA 4.0 attribution, original sources and assumptions
+remain embedded. Source records and preparation scripts for the two
+experimental profiles are included in additional-stock-data.tar.gz;
+manufacturer PDF/raster excerpts are excluded and retain their original rights.
+
+B&W reference development times follow Negs' explicit normal-time field or
+its floor-middle family entry: Double-X 6.5 min, Tri-X Reversal 1, HP5 6.5,
+FP4 8, Delta 3200 9, T-Max 100 6, Acros II 7, Tri-X 400 8; 2302 5 and Ilford
+grade 2 1. Tri-X Reversal's single family value is retained as source metadata;
+it does not claim a one-minute complete real-world reversal process.
+The runtime selects a single source time, retains all curve/grain components,
+and maps the single silver-density channel to the native three-lane layout.
+Inter-colour DIR terms are zero. The fourth grain component repeats the finest
+source particle scale, as in Negs. No colour model or measured layer is invented.
+
+Both B&W print materials accept B&W negatives only. Ilford grade 2 requires
+normalized exposure and no preflash; its sensitivity is a neutral integration
+weight, with no claim of calibrated colour-negative printing, absolute paper
+speed, spectral filtration, variable contrast, paper tint or texture. Source
+Tri-X 400 assumptions include an unmeasured shoulder and sensitivity-tail
+truncation beyond 665 nm. Both experimental labels remain visible.
+
+New stock_defaults.json describes all 64 film recommendations and 14 print
+compatibility sets, including provenance. Negative-film target prints follow
+the source profile; Double-X is paired with the available B&W cine print 2302
+as a RAW Photo Editor recommendation. Reversal film bypasses printing. The
+original 20 DIR recommendations match their bundled 0.3.2 profiles; later
+stocks retain their matching source DIR. Grain areas are computed from the
+reference-time source layer curves and source RMS granularity. Verita 200D
+has no stock-specific RMS preset and explicitly uses the upstream generic
+schema defaults. Grain/halation physical values are prepared with effects
+disabled initially. These recommendations apply when a film is selected;
+legacy saved recipe fallback remains separate.
+
+Reproduce the source archive with pack_stock_data.py, then regenerate grain
+areas and the recommendation JSON with pack_stock_grain.py. Data-integrity
+checks compared every prior archive member and calibration entry, all prior
+indices and all 36 prior grain-area triples without differences. GPU pixel
+and installed-package acceptance are recorded separately for the release.
+
 2026-11-27 — Additional profiles compiled into RAW Photo Editor
 
 Additional film and print data are licensed under CC BY-SA 4.0

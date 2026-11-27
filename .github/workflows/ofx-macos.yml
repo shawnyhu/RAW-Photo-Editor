@@ -2,6 +2,12 @@ name: Apple Silicon OFX host
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Native backend to build
+        type: choice
+        options: [ofx, lite]
+        default: ofx
   pull_request:
     branches: [main]
     paths:
@@ -20,6 +26,7 @@ permissions:
 
 jobs:
   build-and-load:
+    if: github.event_name != 'workflow_dispatch' || inputs.target != 'lite'
     runs-on: macos-15
     timeout-minutes: 20
     steps:
@@ -62,4 +69,34 @@ jobs:
           path: |
             ${{ runner.temp }}/mac-ofx-host.tar.gz
             ${{ runner.temp }}/mac-ofx-report.json
+          if-no-files-found: error
+
+  build-lite:
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'lite'
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify signed arm64 Lite engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          python3 -m venv "$RUNNER_TEMP/lite-python"
+          "$RUNNER_TEMP/lite-python/bin/python" -m pip install numpy==2.5.5 scipy==1.18.1 colour-science==0.4.7
+          "$RUNNER_TEMP/lite-python/bin/python" blender_raw/vendor/spektrafilm/build_macos.py
+          vendor=blender_raw/vendor/spektrafilm
+          file "$vendor/libphoto_film.dylib"
+          codesign --verify --strict --verbose=2 "$vendor/libphoto_film.dylib"
+          lipo "$vendor/libphoto_film.dylib" -verify_arch arm64
+          "$RUNNER_TEMP/lite-python/bin/python" tests/spektrafilm_native_catalog.py --report "$RUNNER_TEMP/lite-native-report.json"
+          shasum -a 256 "$vendor/libphoto_film.dylib" "$vendor/SpektraFilm.metal" "$vendor/additional-stock-data.tar.gz" "$vendor/bw-stock-model.patch" "$vendor/stock_defaults.json" > "$RUNNER_TEMP/lite-sha256.txt"
+          tar -czf "$RUNNER_TEMP/lite-stock-metal.tar.gz" -C "$vendor" libphoto_film.dylib SpektraFilm.metal
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lite-stock-metal
+          path: |
+            ${{ runner.temp }}/lite-stock-metal.tar.gz
+            ${{ runner.temp }}/lite-native-report.json
+            ${{ runner.temp }}/lite-sha256.txt
           if-no-files-found: error

@@ -27,6 +27,7 @@ def build(args):
                 archive.extractall(root, filter="data")
 
         run("git", "apply", "--no-index", HERE / "stock-tables.patch")
+        run("git", "apply", "--no-index", HERE / "bw-stock-model.patch")
         run(sys.executable, "tools/generate_profile_curves.py",
             "--output", "SpektraGeneratedProfileCurves.cpp",
             "--counts-output", "SpektraGeneratedProfileCounts.h",

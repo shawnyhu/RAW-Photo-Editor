@@ -61,6 +61,17 @@ extern "C" const char *photo_film_stock_calibration(int32_t index, PhotoFilmStoc
 
 static int render_frame(float *source, float *result, int width, int height,
                         SpektraAppRenderParams &recipe, double frame, char *error, size_t error_size) {
+  // Full film simulation requires calibrated, matching material families.
+  // Direct scans and Print Only do not use a film/print pairing.
+  if (recipe.process == 0) {
+    const auto *film = spektrafilm::filmProfileCurves(recipe.film);
+    const auto *paper = spektrafilm::paperProfileCurves(recipe.paper);
+    if (film && paper && film->monochrome != paper->monochrome) {
+      std::snprintf(error, error_size,
+                    "Film and print material must both be color or both be black and white");
+      return 0;
+    }
+  }
 #ifdef _WIN32
   if (!source || !result || width <= 0 || height <= 0 || width > INT32_MAX / 16 ||
       uint64_t(width) * height > UINT32_MAX / 16) {

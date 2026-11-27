@@ -1,0 +1,1080 @@
+--- a/shaders/SpektraFilm.metal
++++ b/shaders/SpektraFilm.metal
+@@ -121,7 +121,7 @@
+   float grainSynthesisLayerScale1;
+   float grainSynthesisLayerScale2;
+   uint grainSynthesisLayered;
+-  uint _padGrainSynthesis0;
++  uint grainProfileLayerCount;
+   uint halationEnabled;
+   float scatterAmount;
+   float scatterScale;
+@@ -207,7 +207,7 @@
+ 
+ struct SpektraCurveInfo {
+   uint exposureCount;
+-  uint _pad0;
++  uint grainLayerCount;
+   uint _pad1;
+   uint _pad2;
+ };
+@@ -1068,7 +1068,7 @@
+   const float pixelArea = max(params.filmPixelSizeUm * params.filmPixelSizeUm, 1.0e-6);
+   const float finalBlurPx = spektra_grain_final_blur_um(params) / max(params.filmPixelSizeUm, 1.0e-6);
+   const float blurDamping = rsqrt(1.0 + 0.35 * finalBlurPx + 0.12 * max(params.grainBlurDyeCloudsUm, 0.0));
+-  const uint layerCount = params.grainSublayersEnabled != 0 ? 3u : uint(clamp(params.grainSubLayerCount, 1, 8));
++  const uint layerCount = params.grainSublayersEnabled != 0 ? params.grainProfileLayerCount : uint(clamp(params.grainSubLayerCount, 1, 8));
+ 
+   for (uint channel = 0u; channel < 3u; ++channel) {
+     const float densityMin = spektra_channel_density_min(channel, params);
+@@ -1107,6 +1107,7 @@
+   device const float *densityCurves,
+   device const float *densityCurveLayers
+ ) {
++  if (layer >= curveInfo.grainLayerCount) return 0.0;
+   const uint count = curveInfo.exposureCount;
+   if (count == 0u) {
+     return 0.0;
+@@ -1119,7 +1120,7 @@
+     return densityCurveLayers[layer * 3u + channel];
+   }
+   if ((ascending && target >= lastX) || (!ascending && target <= lastX)) {
+-    return densityCurveLayers[(count - 1u) * 9u + layer * 3u + channel];
++    return densityCurveLayers[(count - 1u) * 12u + layer * 3u + channel];
+   }
+ 
+   uint lo = 0u;
+@@ -1136,8 +1137,8 @@
+ 
+   const float x0 = info.filmPositive != 0u ? -densityCurves[lo * 3u + channel] : densityCurves[lo * 3u + channel];
+   const float x1 = info.filmPositive != 0u ? -densityCurves[hi * 3u + channel] : densityCurves[hi * 3u + channel];
+-  const float y0 = densityCurveLayers[lo * 9u + layer * 3u + channel];
+-  const float y1 = densityCurveLayers[hi * 9u + layer * 3u + channel];
++  const float y0 = densityCurveLayers[lo * 12u + layer * 3u + channel];
++  const float y1 = densityCurveLayers[hi * 12u + layer * 3u + channel];
+   const float t = clamp((target - x0) / max(x1 - x0, 1.0e-9), 0.0, 1.0);
+   return max(mix(y0, y1, t), 0.0);
+ }
+@@ -1166,13 +1167,13 @@
+     const float densityMin = spektra_channel_density_min(channel, params);
+     const float uniformity = spektra_channel_uniformity(channel, params);
+     float densityMaxTotal = 0.0;
+-    for (uint layer = 0u; layer < 3u; ++layer) {
++    for (uint layer = 0u; layer < params.grainProfileLayerCount; ++layer) {
+       densityMaxTotal += max(densityCurveLayerMaxima[layer * 3u + channel], 0.0);
+     }
+     densityMaxTotal = max(densityMaxTotal, 1.0e-6);
+ 
+     float channelDensity = 0.0;
+-    for (uint layer = 0u; layer < 3u; ++layer) {
++    for (uint layer = 0u; layer < params.grainProfileLayerCount; ++layer) {
+       const float layerMax = max(densityCurveLayerMaxima[layer * 3u + channel], 0.0);
+       const float layerFraction = layerMax / densityMaxTotal;
+       const float layerDensityMin = layerFraction * densityMin;
+@@ -2944,7 +2945,7 @@
+   device const float *densityCurveLayerMaxima
+ ) {
+   float total = 0.0;
+-  for (uint layer = 0u; layer < 3u; ++layer) {
++  for (uint layer = 0u; layer < 4u; ++layer) {
+     total += max(densityCurveLayerMaxima[layer * 3u + channel], 0.0);
+   }
+   return max(total, 1.0e-6);
+@@ -2963,6 +2964,7 @@
+   float2 filmUm,
+   uint baseSeed
+ ) {
++  if (layer >= params.grainProfileLayerCount) return 0.0;
+   const float pixelArea = max(params.filmPixelSizeUm * params.filmPixelSizeUm, 1.0e-6);
+   const float densityMin = spektra_channel_density_min(channel, params);
+   const float uniformity = spektra_channel_uniformity(channel, params);
+@@ -3074,7 +3076,7 @@
+ ) {
+   const uint sx = spektra_safe_index(x, width);
+   const uint sy = spektra_safe_index(y, height);
+-  return buffer[(sy * width + sx) * 9u + component];
++  return buffer[(sy * width + sx) * 12u + component];
+ }
+ 
+ static float4 spektra_float4_buffer_sample(
+@@ -3383,7 +3385,7 @@
+ ) {
+   const uint sx = uint(clamp(x, 0, int(width) - 1));
+   const uint sy = uint(clamp(y, 0, int(height) - 1));
+-  return float(data[(sy * width + sx) * 9u + component]);
++  return float(data[(sy * width + sx) * 12u + component]);
+ }
+ 
+ static float spektra_grain_synthesis_target_at_um_half(
+@@ -4639,18 +4641,18 @@
+   const SpektraGaussianBlurInfo info = spektra_make_gaussian_blur_info(sigma, radiusLimit);
+   const uint index = gid.y * width + gid.x;
+   if (info.active == 0u || info.radius == 0u) {
+-    return source[index * 9u + component];
++    return source[index * 12u + component];
+   }
+   const int x = int(gid.x);
+   const int y = int(gid.y);
+   const int radius = int(info.radius);
+   const bool interior = x >= radius && x + radius < int(width);
+-  float value = source[index * 9u + component];
++  float value = source[index * 12u + component];
+   float weight = info.firstWeight;
+   float ratio = info.firstRatio;
+   for (int offset = 1; offset <= radius; ++offset) {
+     const float samplePair = interior
+-      ? source[(index - uint(offset)) * 9u + component] + source[(index + uint(offset)) * 9u + component]
++      ? source[(index - uint(offset)) * 12u + component] + source[(index + uint(offset)) * 12u + component]
+       : spektra_layer_buffer_sample(source, width, height, x - offset, y, component) +
+         spektra_layer_buffer_sample(source, width, height, x + offset, y, component);
+     value += weight * samplePair;
+@@ -4672,19 +4674,19 @@
+   const SpektraGaussianBlurInfo info = spektra_make_gaussian_blur_info(sigma, radiusLimit);
+   const uint index = gid.y * width + gid.x;
+   if (info.active == 0u || info.radius == 0u) {
+-    return source[index * 9u + component];
++    return source[index * 12u + component];
+   }
+   const int x = int(gid.x);
+   const int y = int(gid.y);
+   const int radius = int(info.radius);
+   const bool interior = y >= radius && y + radius < int(height);
+-  float value = source[index * 9u + component];
++  float value = source[index * 12u + component];
+   float weight = info.firstWeight;
+   float ratio = info.firstRatio;
+   for (int offset = 1; offset <= radius; ++offset) {
+     const uint stride = uint(offset) * width;
+     const float samplePair = interior
+-      ? source[(index - stride) * 9u + component] + source[(index + stride) * 9u + component]
++      ? source[(index - stride) * 12u + component] + source[(index + stride) * 12u + component]
+       : spektra_layer_buffer_sample(source, width, height, x, y - offset, component) +
+         spektra_layer_buffer_sample(source, width, height, x, y + offset, component);
+     value += weight * samplePair;
+@@ -5467,7 +5469,7 @@
+   device const float *paperScanDensityData [[buffer(17)]],
+   uint3 gid [[thread_position_in_grid]]
+ ) {
+-  if (gid.x >= dims.x || gid.y >= dims.y || gid.z >= 9u) {
++  if (gid.x >= dims.x || gid.y >= dims.y || gid.z >= 12u) {
+     return;
+   }
+   const uint index = gid.y * dims.x + gid.x;
+@@ -5476,7 +5478,7 @@
+   const uint channel = component - layer * 3u;
+   device const float *paperBaseDensity = paperScanDensityData + spectralInfo.filmWavelengthCount * 3u;
+   device const float *filmDensityCurveLayers = paperBaseDensity + spectralInfo.filmWavelengthCount;
+-  device const float *filmDensityCurveLayerMaxima = filmDensityCurveLayers + curveInfo.exposureCount * 9u;
++  device const float *filmDensityCurveLayerMaxima = filmDensityCurveLayers + curveInfo.exposureCount * 12u;
+   const uint frameSeed = params.grainAnimate != 0 ? uint(floor(params.time * 24.0 + 0.5)) : 0u;
+   const uint baseSeed = params.grainSeed ^ frameSeed;
+   const float2 filmUm = spektra_output_pixel_film_um(gid.xy, params, dims);
+@@ -5500,7 +5502,7 @@
+     logExposure,
+     densityCurves
+   );
+-  layerOut[index * 9u + component] = spektra_production_layer_particle_density(
++  layerOut[index * 12u + component] = spektra_production_layer_particle_density(
+     filmDensityCmy,
+     layer,
+     channel,
+@@ -5526,7 +5528,7 @@
+   device const float *paperScanDensityData [[buffer(7)]],
+   uint3 gid [[thread_position_in_grid]]
+ ) {
+-  if (gid.x >= dims.x || gid.y >= dims.y || gid.z >= 9u) {
++  if (gid.x >= dims.x || gid.y >= dims.y || gid.z >= 12u) {
+     return;
+   }
+   const uint index = gid.y * dims.x + gid.x;
+@@ -5535,11 +5537,11 @@
+   const uint channel = component - layer * 3u;
+   device const float *paperBaseDensity = paperScanDensityData + spectralInfo.filmWavelengthCount * 3u;
+   device const float *filmDensityCurveLayers = paperBaseDensity + spectralInfo.filmWavelengthCount;
+-  device const float *filmDensityCurveLayerMaxima = filmDensityCurveLayers + curveInfo.exposureCount * 9u;
++  device const float *filmDensityCurveLayerMaxima = filmDensityCurveLayers + curveInfo.exposureCount * 12u;
+   const uint frameSeed = params.grainAnimate != 0 ? uint(floor(params.time * 24.0 + 0.5)) : 0u;
+   const uint baseSeed = params.grainSeed ^ frameSeed;
+   const float2 filmUm = spektra_output_pixel_film_um(gid.xy, params, dims);
+-  layerOut[index * 9u + component] = spektra_production_layer_particle_density(
++  layerOut[index * 12u + component] = spektra_production_layer_particle_density(
+     filmDensity[index].rgb,
+     layer,
+     channel,
+@@ -5566,7 +5568,7 @@
+   uint3 gid,
+   bool fixedRadius
+ ) {
+-  if (gid.x >= dims.x || gid.y >= dims.y || gid.z >= 9u) {
++  if (gid.x >= dims.x || gid.y >= dims.y || gid.z >= 12u) {
+     return;
+   }
+   const uint index = gid.y * dims.x + gid.x;
+@@ -5574,7 +5576,7 @@
+   const uint layer = component / 3u;
+   const uint channel = component - layer * 3u;
+   if (params.grainSynthesisLayered == 0u && layer > 0u) {
+-    layerOut[index * 9u + component] = 0.0;
++    layerOut[index * 12u + component] = 0.0;
+     return;
+   }
+ 
+@@ -5596,7 +5598,7 @@
+     filmDensityCurveLayers
+   );
+   if (targetCenterDensity <= 1.0e-7 && sigmaUm <= 1.0e-6) {
+-    layerOut[index * 9u + component] = 0.0;
++    layerOut[index * 12u + component] = 0.0;
+     return;
+   }
+ 
+@@ -5632,7 +5634,7 @@
+ 
+   const float epsilon = max(params.grainSynthesisCoverageEpsilon, 1.0e-8);
+   const float coverage = clamp(covered / max(float(sampleCount), 1.0), 0.0, 1.0 - epsilon);
+-  layerOut[index * 9u + component] = -log(max(1.0 - coverage, epsilon)) / 2.302585093;
++  layerOut[index * 12u + component] = -log(max(1.0 - coverage, epsilon)) / 2.302585093;
+ }
+ 
+ kernel void spektrafilm_grain_synthesis_layers_from_density(
+@@ -5705,14 +5707,14 @@
+   const uint layer = component / 3u;
+   const uint channel = component - layer * 3u;
+   if (params.grainSynthesisLayered == 0u && layer > 0u) {
+-    targetOut[index * 9u + component] = 0.0;
++    targetOut[index * 12u + component] = 0.0;
+     return;
+   }
+ 
+   device const float *paperBaseDensity = paperScanDensityData + spectralInfo.filmWavelengthCount * 3u;
+   device const float *filmDensityCurveLayers = paperBaseDensity + spectralInfo.filmWavelengthCount;
+   const float2 centerUm = spektra_output_pixel_film_um(gid.xy, params, dims);
+-  targetOut[index * 9u + component] = spektra_grain_synthesis_density_at_um(
++  targetOut[index * 12u + component] = spektra_grain_synthesis_density_at_um(
+     filmDensity,
+     centerUm,
+     layer,
+@@ -5747,7 +5749,7 @@
+     spectralInfo,
+     paperScanDensityData,
+     gid,
+-    9u
++    12u
+   );
+ }
+ 
+@@ -5796,14 +5798,14 @@
+   const uint layer = component / 3u;
+   const uint channel = component - layer * 3u;
+   if (params.grainSynthesisLayered == 0u && layer > 0u) {
+-    targetOut[index * 9u + component] = half(0.0);
++    targetOut[index * 12u + component] = half(0.0);
+     return;
+   }
+ 
+   device const float *paperBaseDensity = paperScanDensityData + spectralInfo.filmWavelengthCount * 3u;
+   device const float *filmDensityCurveLayers = paperBaseDensity + spectralInfo.filmWavelengthCount;
+   const float2 centerUm = spektra_output_pixel_film_um(gid.xy, params, dims);
+-  targetOut[index * 9u + component] = half(spektra_grain_synthesis_density_at_um(
++  targetOut[index * 12u + component] = half(spektra_grain_synthesis_density_at_um(
+     filmDensity,
+     centerUm,
+     layer,
+@@ -5838,7 +5840,7 @@
+     spectralInfo,
+     paperScanDensityData,
+     gid,
+-    9u
++    12u
+   );
+ }
+ 
+@@ -5929,7 +5931,7 @@
+     spectralInfo,
+     paperScanDensityData,
+     gid,
+-    9u
++    12u
+   );
+ }
+ 
+@@ -5978,15 +5980,15 @@
+   const uint component = gid.z;
+   const SpektraGrainSynthesisComponentInfo eval = componentInfo[component];
+   if (eval.active == 0u || eval.sampleCount == 0u) {
+-    layerOut[index * 9u + component] = 0.0;
++    layerOut[index * 12u + component] = 0.0;
+     return;
+   }
+ 
+   const float sigmaUm = max(params.grainSynthesisObservationSigmaUm, 0.0);
+   const float2 centerUm = spektra_output_pixel_film_um(gid.xy, params, dims);
+-  const float targetCenterDensity = max(targetDensities[index * 9u + component], 0.0);
++  const float targetCenterDensity = max(targetDensities[index * 12u + component], 0.0);
+   if (targetCenterDensity <= 1.0e-7 && sigmaUm <= 1.0e-6) {
+-    layerOut[index * 9u + component] = 0.0;
++    layerOut[index * 12u + component] = 0.0;
+     return;
+   }
+ 
+@@ -6017,7 +6019,7 @@
+ 
+   const float epsilon = max(params.grainSynthesisCoverageEpsilon, 1.0e-8);
+   const float coverage = clamp(covered / max(float(sampleCount), 1.0), 0.0, 1.0 - epsilon);
+-  layerOut[index * 9u + component] = -log(max(1.0 - coverage, epsilon)) / 2.302585093;
++  layerOut[index * 12u + component] = -log(max(1.0 - coverage, epsilon)) / 2.302585093;
+ }
+ 
+ kernel void spektrafilm_grain_synthesis_layers_from_target_density(
+@@ -6042,7 +6044,7 @@
+     cellOffsets,
+     gid,
+     false,
+-    9u
++    12u
+   );
+ }
+ 
+@@ -6068,7 +6070,7 @@
+     cellOffsets,
+     gid,
+     true,
+-    9u
++    12u
+   );
+ }
+ 
+@@ -6144,15 +6146,15 @@
+   const uint component = gid.z;
+   const SpektraGrainSynthesisComponentInfo eval = componentInfo[component];
+   if (eval.active == 0u || eval.sampleCount == 0u) {
+-    layerOut[index * 9u + component] = 0.0f;
++    layerOut[index * 12u + component] = 0.0f;
+     return;
+   }
+ 
+   const float sigmaUm = max(params.grainSynthesisObservationSigmaUm, 0.0f);
+   const float2 centerUm = spektra_output_pixel_film_um(gid.xy, params, dims);
+-  const float targetCenterDensity = max(float(targetDensities[index * 9u + component]), 0.0f);
++  const float targetCenterDensity = max(float(targetDensities[index * 12u + component]), 0.0f);
+   if (targetCenterDensity <= 1.0e-7f && sigmaUm <= 1.0e-6f) {
+-    layerOut[index * 9u + component] = 0.0f;
++    layerOut[index * 12u + component] = 0.0f;
+     return;
+   }
+ 
+@@ -6183,7 +6185,7 @@
+ 
+   const float epsilon = max(params.grainSynthesisCoverageEpsilon, 1.0e-8f);
+   const float coverage = clamp(covered / max(float(sampleCount), 1.0f), 0.0f, 1.0f - epsilon);
+-  layerOut[index * 9u + component] = -log(max(1.0f - coverage, epsilon)) / 2.302585093f;
++  layerOut[index * 12u + component] = -log(max(1.0f - coverage, epsilon)) / 2.302585093f;
+ }
+ 
+ kernel void spektrafilm_grain_synthesis_layers_from_target_density_half(
+@@ -6208,7 +6210,7 @@
+     cellOffsets,
+     gid,
+     false,
+-    9u
++    12u
+   );
+ }
+ 
+@@ -6234,7 +6236,7 @@
+     cellOffsets,
+     gid,
+     true,
+-    9u
++    12u
+   );
+ }
+ 
+@@ -6310,7 +6312,7 @@
+   const uint component = gid.z;
+   const SpektraGrainSynthesisComponentInfo eval = componentInfo[component];
+   if (eval.active == 0u || eval.sampleCount == 0u) {
+-    layerOut[index * 9u + component] = 0.0f;
++    layerOut[index * 12u + component] = 0.0f;
+     return;
+   }
+ 
+@@ -6318,7 +6320,7 @@
+   const float2 centerUm = spektra_output_pixel_film_um(gid.xy, params, dims);
+   const float targetCenterDensity = max(float(targetDensities.read(gid.xy, component).r), 0.0f);
+   if (targetCenterDensity <= 1.0e-7f && sigmaUm <= 1.0e-6f) {
+-    layerOut[index * 9u + component] = 0.0f;
++    layerOut[index * 12u + component] = 0.0f;
+     return;
+   }
+ 
+@@ -6349,7 +6351,7 @@
+ 
+   const float epsilon = max(params.grainSynthesisCoverageEpsilon, 1.0e-8f);
+   const float coverage = clamp(covered / max(float(sampleCount), 1.0f), 0.0f, 1.0f - epsilon);
+-  layerOut[index * 9u + component] = -log(max(1.0f - coverage, epsilon)) / 2.302585093f;
++  layerOut[index * 12u + component] = -log(max(1.0f - coverage, epsilon)) / 2.302585093f;
+ }
+ 
+ kernel void spektrafilm_grain_synthesis_layers_from_target_density_r16_texture_array(
+@@ -6374,7 +6376,7 @@
+     cellOffsets,
+     gid,
+     false,
+-    9u
++    12u
+   );
+ }
+ 
+@@ -6400,7 +6402,7 @@
+     cellOffsets,
+     gid,
+     true,
+-    9u
++    12u
+   );
+ }
+ 
+@@ -6472,15 +6474,15 @@
+   float3 density = float3(0.0);
+   if (params.grainSynthesisLayered == 0u) {
+     density = float3(
+-      max(layerIn[index * 9u], 0.0),
+-      max(layerIn[index * 9u + 1u], 0.0),
+-      max(layerIn[index * 9u + 2u], 0.0)
++      max(layerIn[index * 12u], 0.0),
++      max(layerIn[index * 12u + 1u], 0.0),
++      max(layerIn[index * 12u + 2u], 0.0)
+     );
+   } else {
+-    for (uint layer = 0u; layer < 3u; ++layer) {
+-      density.r += max(layerIn[index * 9u + layer * 3u], 0.0);
+-      density.g += max(layerIn[index * 9u + layer * 3u + 1u], 0.0);
+-      density.b += max(layerIn[index * 9u + layer * 3u + 2u], 0.0);
++    for (uint layer = 0u; layer < params.grainProfileLayerCount; ++layer) {
++      density.r += max(layerIn[index * 12u + layer * 3u], 0.0);
++      density.g += max(layerIn[index * 12u + layer * 3u + 1u], 0.0);
++      density.b += max(layerIn[index * 12u + layer * 3u + 2u], 0.0);
+     }
+   }
+   density *= max(microIn[index].rgb, float3(0.0));
+@@ -6500,7 +6502,7 @@
+   constant uint &useRecurrence [[buffer(7)]],
+   uint3 gid [[thread_position_in_grid]]
+ ) {
+-  if (gid.x >= dims.x || gid.y >= dims.y || gid.z >= 9u) {
++  if (gid.x >= dims.x || gid.y >= dims.y || gid.z >= 12u) {
+     return;
+   }
+   const uint component = gid.z;
+@@ -6508,19 +6510,19 @@
+   const uint channel = component - layer * 3u;
+   const uint index = gid.y * dims.x + gid.x;
+   if (params.grainModel == 2 && params.grainSynthesisLayered == 0u && layer > 0u) {
+-    layerOut[index * 9u + component] = 0.0;
++    layerOut[index * 12u + component] = 0.0;
+     return;
+   }
+   device const float *paperBaseDensity = paperScanDensityData + spectralInfo.filmWavelengthCount * 3u;
+   device const float *filmDensityCurveLayers = paperBaseDensity + spectralInfo.filmWavelengthCount;
+-  device const float *filmDensityCurveLayerMaxima = filmDensityCurveLayers + curveInfo.exposureCount * 9u;
++  device const float *filmDensityCurveLayerMaxima = filmDensityCurveLayers + curveInfo.exposureCount * 12u;
+   const float sigma = spektra_grain_layer_blur_sigma(layer, channel, params, filmDensityCurveLayerMaxima);
+   if (sigma <= 1.0e-4) {
+-    layerOut[index * 9u + component] = layerIn[index * 9u + component];
++    layerOut[index * 12u + component] = layerIn[index * 12u + component];
+     return;
+   }
+   if (useRecurrence != 0u) {
+-    layerOut[index * 9u + component] = spektra_layer_gaussian_sample_x_limited(
++    layerOut[index * 12u + component] = spektra_layer_gaussian_sample_x_limited(
+       layerIn, dims.x, dims.y, gid.xy, component, sigma, 64);
+     return;
+   }
+@@ -6532,7 +6534,7 @@
+     value += weight * spektra_layer_buffer_sample(layerIn, dims.x, dims.y, int(gid.x) + offset, int(gid.y), component);
+     weightSum += weight;
+   }
+-  layerOut[index * 9u + component] = value / max(weightSum, 1.0e-8);
++  layerOut[index * 12u + component] = value / max(weightSum, 1.0e-8);
+ }
+ 
+ kernel void spektrafilm_grain_layer_blur_y(
+@@ -6546,7 +6548,7 @@
+   constant uint &useRecurrence [[buffer(7)]],
+   uint3 gid [[thread_position_in_grid]]
+ ) {
+-  if (gid.x >= dims.x || gid.y >= dims.y || gid.z >= 9u) {
++  if (gid.x >= dims.x || gid.y >= dims.y || gid.z >= 12u) {
+     return;
+   }
+   const uint component = gid.z;
+@@ -6554,19 +6556,19 @@
+   const uint channel = component - layer * 3u;
+   const uint index = gid.y * dims.x + gid.x;
+   if (params.grainModel == 2 && params.grainSynthesisLayered == 0u && layer > 0u) {
+-    layerOut[index * 9u + component] = 0.0;
++    layerOut[index * 12u + component] = 0.0;
+     return;
+   }
+   device const float *paperBaseDensity = paperScanDensityData + spectralInfo.filmWavelengthCount * 3u;
+   device const float *filmDensityCurveLayers = paperBaseDensity + spectralInfo.filmWavelengthCount;
+-  device const float *filmDensityCurveLayerMaxima = filmDensityCurveLayers + curveInfo.exposureCount * 9u;
++  device const float *filmDensityCurveLayerMaxima = filmDensityCurveLayers + curveInfo.exposureCount * 12u;
+   const float sigma = spektra_grain_layer_blur_sigma(layer, channel, params, filmDensityCurveLayerMaxima);
+   if (sigma <= 1.0e-4) {
+-    layerOut[index * 9u + component] = layerIn[index * 9u + component];
++    layerOut[index * 12u + component] = layerIn[index * 12u + component];
+     return;
+   }
+   if (useRecurrence != 0u) {
+-    layerOut[index * 9u + component] = spektra_layer_gaussian_sample_y_limited(
++    layerOut[index * 12u + component] = spektra_layer_gaussian_sample_y_limited(
+       layerIn, dims.x, dims.y, gid.xy, component, sigma, 64);
+     return;
+   }
+@@ -6578,7 +6580,7 @@
+     value += weight * spektra_layer_buffer_sample(layerIn, dims.x, dims.y, int(gid.x), int(gid.y) + offset, component);
+     weightSum += weight;
+   }
+-  layerOut[index * 9u + component] = value / max(weightSum, 1.0e-8);
++  layerOut[index * 12u + component] = value / max(weightSum, 1.0e-8);
+ }
+ 
+ kernel void spektrafilm_grain_microstructure_source(
+@@ -6692,9 +6694,9 @@
+   const uint index = gid.y * dims.x + gid.x;
+   if (params.grainSublayersEnabled == 0u) {
+     densityOut[index] = float4(
+-      max(layerIn[index * 9u], 0.0),
+-      max(layerIn[index * 9u + 1u], 0.0),
+-      max(layerIn[index * 9u + 2u], 0.0),
++      max(layerIn[index * 12u], 0.0),
++      max(layerIn[index * 12u + 1u], 0.0),
++      max(layerIn[index * 12u + 2u], 0.0),
+       source[index].a
+     );
+     return;
+@@ -6705,10 +6707,10 @@
+     spektra_channel_density_min(2u, params)
+   );
+   float3 density = float3(0.0);
+-  for (uint layer = 0u; layer < 3u; ++layer) {
+-    density.r += layerIn[index * 9u + layer * 3u];
+-    density.g += layerIn[index * 9u + layer * 3u + 1u];
+-    density.b += layerIn[index * 9u + layer * 3u + 2u];
++  for (uint layer = 0u; layer < params.grainProfileLayerCount; ++layer) {
++    density.r += layerIn[index * 12u + layer * 3u];
++    density.g += layerIn[index * 12u + layer * 3u + 1u];
++    density.b += layerIn[index * 12u + layer * 3u + 2u];
+   }
+   density *= microIn[index].rgb;
+   densityOut[index] = float4(max(density - densityMin, float3(0.0)), source[index].a);
+@@ -7715,7 +7717,7 @@
+   device const float *paperChannelDensity = paperScanDensityData;
+   device const float *paperBaseDensity = paperScanDensityData + spectralInfo.filmWavelengthCount * 3u;
+   device const float *filmDensityCurveLayers = paperBaseDensity + spectralInfo.filmWavelengthCount;
+-  device const float *filmDensityCurveLayerMaxima = filmDensityCurveLayers + curveInfo.exposureCount * 9u;
++  device const float *filmDensityCurveLayerMaxima = filmDensityCurveLayers + curveInfo.exposureCount * 12u;
+   device const float *filmScanIlluminant = scanIlluminantsAndCmfs;
+   device const float *paperScanIlluminant = scanIlluminantsAndCmfs + spectralInfo.filmWavelengthCount;
+   device const float *standardObserverCmfs = scanIlluminantsAndCmfs + spectralInfo.filmWavelengthCount * 2u;
+--- a/shaders/vulkan/SpektraGrain.comp
++++ b/shaders/vulkan/SpektraGrain.comp
+@@ -67,6 +67,7 @@
+ const uint kFrameIntGrainSynthesisLayered = 24u;
+ const uint kFrameIntGrainSynthesisActive = 25u;
+ const uint kFrameIntGrainBlurRecurrence = 26u;
++const uint kFrameIntGrainProfileLayerCount = 29u;
+ 
+ layout(std430, binding = 0) readonly buffer SourcePixels {
+   vec4 sourcePixels[];
+@@ -244,13 +245,13 @@
+ float sampleLayerA(int x, int y, uint component) {
+   const uint sx = clampX(x);
+   const uint sy = clampY(y);
+-  return grainLayerA[(sy * params.width + sx) * 9u + component];
++  return grainLayerA[(sy * params.width + sx) * 12u + component];
+ }
+ 
+ float sampleLayerB(int x, int y, uint component) {
+   const uint sx = clampX(x);
+   const uint sy = clampY(y);
+-  return grainLayerB[(sy * params.width + sx) * 9u + component];
++  return grainLayerB[(sy * params.width + sx) * 12u + component];
+ }
+ 
+ vec4 sampleMicroA(int x, int y) {
+@@ -394,7 +395,7 @@
+   const float finalBlurPx = max(f(kFrameGrainFinalBlurSigmaPx), 0.0);
+   const float blurDamping = inversesqrt(1.0 + 0.35 * finalBlurPx + 0.12 * max(f(kFrameGrainBlurDyeCloudsUm), 0.0));
+   const uint layerCount = u(kFrameIntGrainSublayersEnabled) != 0u
+-    ? 3u
++    ? u(kFrameIntGrainProfileLayerCount)
+     : uint(clamp(int(u(kFrameIntGrainSubLayerCount)), 1, 8));
+ 
+   for (uint channel = 0u; channel < 3u; ++channel) {
+@@ -426,6 +427,7 @@
+ }
+ 
+ float interpDensityLayer(float density, uint channel, uint layer) {
++  if (layer >= u(kFrameIntGrainProfileLayerCount)) return 0.0;
+   const uint count = params.exposureCount;
+   if (count == 0u) {
+     return 0.0;
+@@ -441,7 +443,7 @@
+     return densityCurveLayers[layer * 3u + channel];
+   }
+   if ((ascending && target >= lastX) || (!ascending && target <= lastX)) {
+-    return densityCurveLayers[(count - 1u) * 9u + layer * 3u + channel];
++    return densityCurveLayers[(count - 1u) * 12u + layer * 3u + channel];
+   }
+ 
+   uint lo = 0u;
+@@ -458,15 +460,15 @@
+ 
+   const float x0 = positive ? -densityCurves[lo * 3u + channel] : densityCurves[lo * 3u + channel];
+   const float x1 = positive ? -densityCurves[hi * 3u + channel] : densityCurves[hi * 3u + channel];
+-  const float y0 = densityCurveLayers[lo * 9u + layer * 3u + channel];
+-  const float y1 = densityCurveLayers[hi * 9u + layer * 3u + channel];
++  const float y0 = densityCurveLayers[lo * 12u + layer * 3u + channel];
++  const float y1 = densityCurveLayers[hi * 12u + layer * 3u + channel];
+   const float t = clamp((target - x0) / max(x1 - x0, 1.0e-9), 0.0, 1.0);
+   return max(mix(y0, y1, t), 0.0);
+ }
+ 
+ float layerDensityMaxTotal(uint channel) {
+   float total = 0.0;
+-  for (uint layer = 0u; layer < 3u; ++layer) {
++  for (uint layer = 0u; layer < u(kFrameIntGrainProfileLayerCount); ++layer) {
+     total += max(densityCurveLayerMaxima[layer * 3u + channel], 0.0);
+   }
+   return max(total, 1.0e-6);
+@@ -737,15 +739,15 @@
+   vec3 density = vec3(0.0);
+   if (u(kFrameIntGrainSynthesisLayered) == 0u) {
+     density = vec3(
+-      max(grainLayerA[index * 9u], 0.0),
+-      max(grainLayerA[index * 9u + 1u], 0.0),
+-      max(grainLayerA[index * 9u + 2u], 0.0)
++      max(grainLayerA[index * 12u], 0.0),
++      max(grainLayerA[index * 12u + 1u], 0.0),
++      max(grainLayerA[index * 12u + 2u], 0.0)
+     );
+   } else {
+-    for (uint layer = 0u; layer < 3u; ++layer) {
+-      density.r += max(grainLayerA[index * 9u + layer * 3u], 0.0);
+-      density.g += max(grainLayerA[index * 9u + layer * 3u + 1u], 0.0);
+-      density.b += max(grainLayerA[index * 9u + layer * 3u + 2u], 0.0);
++    for (uint layer = 0u; layer < u(kFrameIntGrainProfileLayerCount); ++layer) {
++      density.r += max(grainLayerA[index * 12u + layer * 3u], 0.0);
++      density.g += max(grainLayerA[index * 12u + layer * 3u + 1u], 0.0);
++      density.b += max(grainLayerA[index * 12u + layer * 3u + 2u], 0.0);
+     }
+   }
+   density *= max(loadMicroAPixel(index).rgb, vec3(0.0));
+@@ -755,6 +757,7 @@
+ }
+ 
+ float productionLayerParticleDensity(vec3 filmDensityCmy, uint layer, uint channel, vec2 filmUm, uint baseSeed) {
++  if (layer >= u(kFrameIntGrainProfileLayerCount)) return 0.0;
+   const float pixelArea = max(f(kFrameFilmPixelSizeUm) * f(kFrameFilmPixelSizeUm), 1.0e-6);
+   const float densityMin = channelDensityMin(channel);
+   const float uniformity = channelUniformity(channel);
+@@ -1058,13 +1061,13 @@
+   }
+ 
+   if (params.operation == kOpProductionLayers) {
+-    if (gid3.z >= 9u) {
++    if (gid3.z >= 12u) {
+       return;
+     }
+     const uint component = gid3.z;
+     const uint layer = component / 3u;
+     const uint channel = component - layer * 3u;
+-    grainLayerA[index * 9u + component] = productionLayerParticleDensity(
++    grainLayerA[index * 12u + component] = productionLayerParticleDensity(
+       loadSourcePixel(index).rgb,
+       layer,
+       channel,
+@@ -1075,26 +1078,26 @@
+   }
+ 
+   if (params.operation == kOpSynthesisLayers) {
+-    if (gid3.z >= 9u) {
++    if (gid3.z >= 12u) {
+       return;
+     }
+-    grainLayerA[index * 9u + gid3.z] = grainSynthesisLayerFromDensity(gid3, baseSeed);
++    grainLayerA[index * 12u + gid3.z] = grainSynthesisLayerFromDensity(gid3, baseSeed);
+     return;
+   }
+ 
+   if (params.operation == kOpLayerBlurX) {
+-    if (gid3.z >= 9u) {
++    if (gid3.z >= 12u) {
+       return;
+     }
+-    grainLayerB[index * 9u + gid3.z] = layerBlurX(gid3, true);
++    grainLayerB[index * 12u + gid3.z] = layerBlurX(gid3, true);
+     return;
+   }
+ 
+   if (params.operation == kOpLayerBlurY) {
+-    if (gid3.z >= 9u) {
++    if (gid3.z >= 12u) {
+       return;
+     }
+-    grainLayerA[index * 9u + gid3.z] = layerBlurY(gid3, false);
++    grainLayerA[index * 12u + gid3.z] = layerBlurY(gid3, false);
+     return;
+   }
+ 
+@@ -1135,19 +1138,19 @@
+     const vec4 source = loadSourcePixel(index);
+     if (u(kFrameIntGrainSublayersEnabled) == 0u) {
+       storeDestinationPixel(index, vec4(
+-        max(grainLayerA[index * 9u], 0.0),
+-        max(grainLayerA[index * 9u + 1u], 0.0),
+-        max(grainLayerA[index * 9u + 2u], 0.0),
++        max(grainLayerA[index * 12u], 0.0),
++        max(grainLayerA[index * 12u + 1u], 0.0),
++        max(grainLayerA[index * 12u + 2u], 0.0),
+         source.a
+       ));
+       return;
+     }
+     const vec3 densityMin = vec3(channelDensityMin(0u), channelDensityMin(1u), channelDensityMin(2u));
+     vec3 density = vec3(0.0);
+-    for (uint layer = 0u; layer < 3u; ++layer) {
+-      density.r += grainLayerA[index * 9u + layer * 3u];
+-      density.g += grainLayerA[index * 9u + layer * 3u + 1u];
+-      density.b += grainLayerA[index * 9u + layer * 3u + 2u];
++    for (uint layer = 0u; layer < u(kFrameIntGrainProfileLayerCount); ++layer) {
++      density.r += grainLayerA[index * 12u + layer * 3u];
++      density.g += grainLayerA[index * 12u + layer * 3u + 1u];
++      density.b += grainLayerA[index * 12u + layer * 3u + 2u];
+     }
+     density *= loadMicroAPixel(index).rgb;
+     storeDestinationPixel(index, vec4(max(density - densityMin, vec3(0.0)), source.a));
+--- a/src/SpektraMetalRenderer.mm
++++ b/src/SpektraMetalRenderer.mm
+@@ -246,7 +246,7 @@
+   float grainSynthesisLayerScale1;
+   float grainSynthesisLayerScale2;
+   uint32_t grainSynthesisLayered;
+-  uint32_t _padGrainSynthesis0;
++  uint32_t grainProfileLayerCount;
+   uint32_t halationEnabled;
+   float scatterAmount;
+   float scatterScale;
+@@ -301,7 +301,7 @@
+   float time;
+ };
+ 
+-constexpr uint32_t kGrainSynthesisComponentCount = 9u;
++constexpr uint32_t kGrainSynthesisComponentCount = 12u;
+ constexpr uint32_t kGrainSynthesisMaxSamples = 1024u;
+ constexpr uint32_t kGrainSynthesisMaxRadiusLutSize = 512u;
+ constexpr uint32_t kGrainSynthesisMaxCellOffsetsPerComponent = 16384u;
+@@ -789,7 +789,7 @@
+     const uint32_t layer = component / 3u;
+     const uint32_t channel = component - layer * 3u;
+     KernelGrainSynthesisComponentInfo info{};
+-    info.active = (params.grainSynthesisLayered != 0u || layer == 0u) ? 1u : 0u;
++    info.active = layer < params.grainProfileLayerCount && (params.grainSynthesisLayered != 0u || layer == 0u) ? 1u : 0u;
+     if (info.active == 0u) {
+       componentInfo[component] = info;
+       continue;
+@@ -979,7 +979,9 @@
+   out.grainModel = static_cast<int32_t>(params.grainModel);
+   out.filmFormat = static_cast<int32_t>(params.filmFormat);
+   out.grainAmount = params.grainAmount;
+-  out.grainSaturation = params.grainSaturation;
++  const ProfileCurveSet *grainProfile = filmProfileCurves(params.film);
++  out.grainSaturation = grainProfile && grainProfile->monochrome ? 1.0f : params.grainSaturation;
++  out.grainProfileLayerCount = grainProfile ? grainProfile->grainLayerCount : 3u;
+   out.grainSublayersEnabled = params.grainSublayersEnabled ? 1u : 0u;
+   out.grainSubLayerCount = std::max(1, params.grainSubLayerCount);
+   out.grainParticleAreaUm2 = params.grainParticleAreaUm2;
+@@ -3136,7 +3138,7 @@
+     next.processNegativePreflashYFilterShift = params.preflashYFilterShift;
+     next.filmCurves = filmCurves;
+     next.paperCurves = paperCurves;
+-    next.curveInfo = {filmCurves->exposureCount, 0u, 0u, 0u};
++    next.curveInfo = {filmCurves->exposureCount, filmCurves->grainLayerCount, 0u, 0u};
+     next.paperCurveInfo = {paperCurves->exposureCount, 0u, 0u, 0u};
+     next.colorInfo = {
+       kSpektraColorSpaceCount,
+@@ -3168,8 +3170,8 @@
+ 
+     const NSUInteger logExposureBytes = static_cast<NSUInteger>(filmCurves->exposureCount) * 2u * sizeof(float);
+     const NSUInteger densityCurveBytes = static_cast<NSUInteger>(filmCurves->exposureCount) * 3u * sizeof(float);
+-    const NSUInteger densityLayerBytes = static_cast<NSUInteger>(filmCurves->exposureCount) * 9u * sizeof(float);
+-    const NSUInteger densityLayerMaxBytes = 9u * sizeof(float);
++    const NSUInteger densityLayerBytes = static_cast<NSUInteger>(filmCurves->exposureCount) * 12u * sizeof(float);
++    const NSUInteger densityLayerMaxBytes = 12u * sizeof(float);
+     const NSUInteger paperLogExposureBytes = static_cast<NSUInteger>(paperCurves->exposureCount) * 2u * sizeof(float);
+     const NSUInteger paperDensityCurveBytes = static_cast<NSUInteger>(paperCurves->exposureCount) * 3u * sizeof(float);
+     const NSUInteger wavelengthBytes = static_cast<NSUInteger>(filmCurves->wavelengthCount) * sizeof(float);
+@@ -3255,13 +3257,13 @@
+     std::vector<float> paperScanDensityData;
+     paperScanDensityData.reserve(
+       static_cast<size_t>(filmCurves->wavelengthCount) * 4u +
+-      static_cast<size_t>(filmCurves->exposureCount) * 9u +
+-      9u
++      static_cast<size_t>(filmCurves->exposureCount) * 12u +
++      12u
+     );
+     paperScanDensityData.insert(paperScanDensityData.end(), paperCurves->channelDensity, paperCurves->channelDensity + filmCurves->wavelengthCount * 3u);
+     paperScanDensityData.insert(paperScanDensityData.end(), paperCurves->baseDensity, paperCurves->baseDensity + filmCurves->wavelengthCount);
+-    paperScanDensityData.insert(paperScanDensityData.end(), filmCurves->densityCurveLayers, filmCurves->densityCurveLayers + filmCurves->exposureCount * 9u);
+-    paperScanDensityData.insert(paperScanDensityData.end(), filmCurves->densityCurveLayerMaxima, filmCurves->densityCurveLayerMaxima + 9u);
++    paperScanDensityData.insert(paperScanDensityData.end(), filmCurves->densityCurveLayers, filmCurves->densityCurveLayers + filmCurves->exposureCount * 12u);
++    paperScanDensityData.insert(paperScanDensityData.end(), filmCurves->densityCurveLayerMaxima, filmCurves->densityCurveLayerMaxima + 12u);
+ 
+     std::vector<float> scanIlluminantsAndCmfs;
+     scanIlluminantsAndCmfs.reserve(static_cast<size_t>(filmCurves->wavelengthCount) * 5u);
+@@ -3991,7 +3993,7 @@
+     const bool grainControlsPath =
+       (productionGrainPath || grainSynthesisPath) &&
+       (std::abs(params.grainAmount - 1.0f) > 1.0e-6f || std::abs(params.grainSaturation - 1.0f) > 1.0e-6f);
+-    const NSUInteger grainLayerBytes = static_cast<NSUInteger>(width) * static_cast<NSUInteger>(height) * 9u * sizeof(float);
++    const NSUInteger grainLayerBytes = static_cast<NSUInteger>(width) * static_cast<NSUInteger>(height) * 12u * sizeof(float);
+     const NSUInteger dirCorrectionBufferBBytes = dirTailPath && !dirTailMpsPath ? bufferBytes * 3u : bufferBytes;
+     const float pixelSizeUm = filmFormatMm(params.filmFormat) * 1000.0f /
+       static_cast<float>(std::max(width, height)) / enlargerScale(params);
+@@ -4708,7 +4710,7 @@
+       finishSplitTimedPass(passIndex, splitPassStart);
+     };
+     auto dispatch3D = [&](id<MTLComputePipelineState> pipeline, uint64_t estimatedBytes = 0u) {
+-      dispatch3DDepth(pipeline, 9u, estimatedBytes ? estimatedBytes : static_cast<uint64_t>(grainLayerBytes) * 2u);
++      dispatch3DDepth(pipeline, 12u, estimatedBytes ? estimatedBytes : static_cast<uint64_t>(grainLayerBytes) * 2u);
+     };
+     auto dispatch1D = [&](id<MTLComputePipelineState> pipeline, NSUInteger threadCount, uint64_t estimatedBytes = 0u) {
+       if (encodeFailed) {
+@@ -5439,7 +5441,7 @@
+       [encoder setBuffer:densityCurvesBuffer offset:0 atIndex:5];
+       [encoder setBuffer:spectralInfoBuffer offset:0 atIndex:6];
+       [encoder setBuffer:paperScanDensityDataBuffer offset:0 atIndex:7];
+-      dispatch3DDepth(targetPipeline, layered ? 9u : 3u);
++      dispatch3DDepth(targetPipeline, layered ? 12u : 3u);
+       if (textureTarget && !encodeFailed) {
+         [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
+       }
+@@ -5489,7 +5491,7 @@
+       [encoder setBuffer:grainSynthesisSampleOffsetBuffer offset:0 atIndex:5];
+       [encoder setBuffer:grainSynthesisRadiusLutBuffer offset:0 atIndex:6];
+       [encoder setBuffer:grainSynthesisCellOffsetBuffer offset:0 atIndex:7];
+-      dispatch3DDepth(synthesisPipeline, layered ? 9u : 3u);
++      dispatch3DDepth(synthesisPipeline, layered ? 12u : 3u);
+     };
+ 
+     auto encodeSelectedGrainSynthesisLayersFromDensity = [&](id<MTLBuffer> densityBuffer) {
+--- a/src/SpektraProfileCurves.h
++++ b/src/SpektraProfileCurves.h
+@@ -53,6 +53,8 @@
+   const float *dirGammaBToRg = nullptr;
+   const float *scanIlluminant = nullptr;
+   const float *scanToOutputRgb = nullptr;
++  uint32_t monochrome = 0;
++  uint32_t grainLayerCount = 3;
+ };
+ 
+ struct HanatosSpectraLutInfo {
+--- a/src/SpektraVulkanRenderer.cpp
++++ b/src/SpektraVulkanRenderer.cpp
+@@ -4043,8 +4043,8 @@
+     makePackedCurveExposure(curves->logExposure, curves->exposureCount);
+   const VkDeviceSize logExposureBytes = static_cast<VkDeviceSize>(packedFilmCurveExposure.size()) * sizeof(float);
+   const VkDeviceSize densityCurveBytes = static_cast<VkDeviceSize>(curves->exposureCount) * 3u * sizeof(float);
+-  const VkDeviceSize densityCurveLayerBytes = static_cast<VkDeviceSize>(curves->exposureCount) * 9u * sizeof(float);
+-  const VkDeviceSize densityCurveLayerMaximaBytes = 9u * sizeof(float);
++  const VkDeviceSize densityCurveLayerBytes = static_cast<VkDeviceSize>(curves->exposureCount) * 12u * sizeof(float);
++  const VkDeviceSize densityCurveLayerMaximaBytes = 12u * sizeof(float);
+   const VkDeviceSize inputMatrixBytes = static_cast<VkDeviceSize>(kSpektraColorSpaceCount) * 9u * sizeof(float);
+   const VkDeviceSize transferLutBytes =
+     static_cast<VkDeviceSize>(kSpektraColorSpaceCount) *
+@@ -4773,7 +4773,7 @@
+     lastError = "The Vulkan core render window is too large.";
+     return false;
+   }
+-  const uint64_t grainLayerByteCount64 = pixelCount * 9u * sizeof(float);
++  const uint64_t grainLayerByteCount64 = pixelCount * 12u * sizeof(float);
+   if (grainLayerByteCount64 > static_cast<uint64_t>(std::numeric_limits<VkDeviceSize>::max())) {
+     lastError = "The Vulkan grain render window is too large.";
+     return false;
+@@ -5157,7 +5157,7 @@
+   }
+   if (frameParamsEnabled &&
+       (!ensureSharedScratchBuffer(coreFrame.frameFloats, kCoreFrameFloatCount * sizeof(float), "core frame float params") ||
+-       !ensureSharedScratchBuffer(coreFrame.frameInts, kCoreFrameIntCount * sizeof(uint32_t), "core frame int params"))) {
++       !ensureSharedScratchBuffer(coreFrame.frameInts, (kCoreFrameIntCount + 1u) * sizeof(uint32_t), "core frame int params"))) {
+     return false;
+   }
+   if (printScanPassEnabled &&
+@@ -5310,7 +5310,7 @@
+     frameFloats[47] = glareRgb[1];
+     frameFloats[48] = glareRgb[2];
+     frameFloats[49] = params.grainAmount;
+-    frameFloats[50] = params.grainSaturation;
++    frameFloats[50] = staticFilm.curves->monochrome ? 1.0f : params.grainSaturation;
+     frameFloats[51] = params.grainParticleAreaUm2;
+     frameFloats[52] = params.grainParticleScaleR;
+     frameFloats[53] = params.grainParticleScaleG;
+@@ -5360,7 +5360,7 @@
+     frameFloats[89] = params.grainSynthesisLayerScale1;
+     frameFloats[90] = params.grainSynthesisLayerScale2;
+ 
+-    std::array<uint32_t, kCoreFrameIntCount> frameInts{};
++    std::array<uint32_t, kCoreFrameIntCount + 1u> frameInts{};
+     frameInts[0] = static_cast<uint32_t>(params.process);
+     frameInts[1] = static_cast<uint32_t>(params.outputColorSpace);
+     frameInts[2] = static_cast<uint32_t>(params.outputRole);
+@@ -5396,6 +5396,7 @@
+     frameInts[26] = grainBlurRecurrence ? 1u : 0u;
+     frameInts[27] = colorAdaptationFlags(params);
+     frameInts[28] = params.scanNegativeInvert ? 1u : 0u;
++    frameInts[29] = staticFilm.curves->grainLayerCount;
+ 
+     if (!coreFrame.frameFloats.mapped || !coreFrame.frameInts.mapped) {
+       lastError = "Vulkan frame parameter buffers are not mapped.";
+@@ -6503,9 +6504,9 @@
+     if (previewGrainPath) {
+       dispatchGrain(coreFrame.grainDescriptorSets[0], kGrainOpPreview, 1u);
+     } else if (productionGrainPath) {
+-      dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpProductionLayers, 9u);
+-      dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpLayerBlurX, 9u);
+-      dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpLayerBlurY, 9u);
++      dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpProductionLayers, 12u);
++      dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpLayerBlurX, 12u);
++      dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpLayerBlurY, 12u);
+       dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpMicroSource, 1u);
+       dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpMicroBlurX, 1u);
+       dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpMicroBlurY, 1u);
+@@ -6515,9 +6516,9 @@
+       dispatchGrain(coreFrame.grainDescriptorSets[4], kGrainOpApplyControls, 1u);
+       consumeSpatialRadius(grainRadius);
+     } else if (grainSynthesisPath) {
+-      dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpSynthesisLayers, 9u);
+-      dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpLayerBlurX, 9u);
+-      dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpLayerBlurY, 9u);
++      dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpSynthesisLayers, 12u);
++      dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpLayerBlurX, 12u);
++      dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpLayerBlurY, 12u);
+       dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpMicroSource, 1u);
+       dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpMicroBlurX, 1u);
+       dispatchGrain(coreFrame.grainDescriptorSets[1], kGrainOpMicroBlurY, 1u);
+@@ -6778,7 +6779,7 @@
+     pass.depth = depth;
+     pass.threadgroupWidth = 32;
+     pass.threadgroupHeight = 8;
+-    pass.estimatedBytes = depth == 9u
++    pass.estimatedBytes = depth == 12u
+       ? static_cast<uint64_t>(grainLayerByteCount) * 2u
+       : static_cast<uint64_t>(pixelStorageByteCount) * 2u;
+     diagnostics.passes.push_back(pass);
+@@ -6924,9 +6925,9 @@
+   if (previewGrainPath) {
+     addComputePass("spektrafilm_preview_grain_from_density");
+   } else if (productionGrainPath) {
+-    addComputePassDepth("spektrafilm_production_grain_layers", 9u);
+-    addComputePassDepth("spektrafilm_grain_layer_blur_x", 9u);
+-    addComputePassDepth("spektrafilm_grain_layer_blur_y", 9u);
++    addComputePassDepth("spektrafilm_production_grain_layers", 12u);
++    addComputePassDepth("spektrafilm_grain_layer_blur_x", 12u);
++    addComputePassDepth("spektrafilm_grain_layer_blur_y", 12u);
+     addComputePass("spektrafilm_grain_microstructure_source");
+     addComputePass("spektrafilm_grain_micro_blur_x");
+     addComputePass("spektrafilm_grain_micro_blur_y");
+@@ -6935,9 +6936,9 @@
+     addComputePass("spektrafilm_grain_density_blur_y");
+     addComputePass("spektrafilm_grain_apply_controls");
+   } else if (grainSynthesisPath) {
+-    addComputePassDepth("spektrafilm_grain_synthesis_layers_from_density", 9u);
+-    addComputePassDepth("spektrafilm_grain_layer_blur_x", 9u);
+-    addComputePassDepth("spektrafilm_grain_layer_blur_y", 9u);
++    addComputePassDepth("spektrafilm_grain_synthesis_layers_from_density", 12u);
++    addComputePassDepth("spektrafilm_grain_layer_blur_x", 12u);
++    addComputePassDepth("spektrafilm_grain_layer_blur_y", 12u);
+     addComputePass("spektrafilm_grain_microstructure_source");
+     addComputePass("spektrafilm_grain_micro_blur_x");
+     addComputePass("spektrafilm_grain_micro_blur_y");
+--- a/tools/generate_profile_curves.py
++++ b/tools/generate_profile_curves.py
+@@ -387,7 +387,28 @@
+ 
+ 
+ def _load_profile(stock: str) -> dict:
+-    return json.loads((PROFILE_DIR / f"{stock}.json").read_text(encoding="utf-8"))
++    profile = json.loads((PROFILE_DIR / f"{stock}.json").read_text(encoding="utf-8"))
++    if profile["info"].get("channel_model") != "bw":
++        return profile
++    # Negs profile::resolve_for_render: the last curve axis is development
++    # time, NEVER RGB. Select the declared normal time before broadcasting.
++    data = profile["data"]
++    times = data["development_time"]
++    requested = ADDITIONAL.get("bw_reference_time", {}).get(
++        stock, data.get("default_development_time", times[(len(times) - 1) // 2]))
++    index = min(range(len(times)), key=lambda i: abs(times[i] - requested))
++    if abs(times[index] - requested) > 1.0e-8:
++        raise ValueError(f"{stock}: B&W reference time is not in the source family")
++    data["selected_development_time"] = times[index]
++    data["log_sensitivity"] = [[row[0]] * 3 for row in data["log_sensitivity"]]
++    data["density_curves"] = [[row[index]] * 3 for row in data["density_curves"]]
++    data["density_curves_layers"] = [
++        [[layer[index]] * 3 for layer in row] for row in data["density_curves_layers"]]
++    data["base_density"] = [row[index] for row in data["base_density"]]
++    # One silver channel: dot(density, [silver, 0, 0]) = density[0] * silver.
++    # Repeating silver into all three slots would triple optical density.
++    data["channel_density"] = [[row[0], 0.0, 0.0] for row in data["channel_density"]]
++    return profile
+ 
+ 
+ def _load_archive_profile(stock: str) -> dict | None:
+@@ -964,10 +985,14 @@
+ 
+ 
+ def _halation_preset(info: dict) -> dict[str, tuple[float, float, float]]:
+-    return HALATION_PRESETS.get(
++    preset = HALATION_PRESETS.get(
+         (info.get("use", "still"), info.get("antihalation", "weak")),
+         {"sigma_h": (65.0, 65.0, 65.0), "strength": (0.05, 0.015, 0.0)},
+     )
++
++    if info.get("channel_model") == "bw":
++        return {key: (values[0],) * 3 for key, values in preset.items()}
++    return preset
+ 
+ 
+ def _dir_coupler_defaults(info: dict) -> dict[str, tuple[float, ...]]:
+@@ -1033,6 +1058,19 @@
+         density_curve_minimum = _density_curve_minimum(profile)
+         density_curve_layers = _numeric_layers(profile, "density_curves_layers")
+         density_curve_layer_maxima = _density_curve_layer_maxima(profile)
++        grain_layer_count = len(density_curve_layer_maxima)
++        if grain_layer_count not in (3, 4):
++            raise ValueError(f"{stock}: unsupported emulsion layer count {grain_layer_count}")
++        # Four physical layers fit the Fotufilm B&W fits. Legacy colour data
++        # retain all original values/order; their extra storage is exactly zero.
++        density_curve_layers = [row + [[0.0] * 3] * (4 - grain_layer_count)
++                                for row in density_curve_layers]
++        density_curve_layer_maxima += [[0.0] * 3] * (4 - grain_layer_count)
++        monochrome = info.get("channel_model") == "bw"
++        if monochrome:
++            # Neutral silver scans: preserve spectral luminance and replicate
++            # it into RGB. This also avoids tiny white-point matrix roundoff.
++            scan_to_output_rgb = [[0.0, 1.0, 0.0] for _ in scan_to_output_rgb]
+         halation_preset = _halation_preset(info)
+         dir_couplers = _dir_coupler_defaults(info)
+         channel_density = _numeric_matrix(profile, "channel_density")
+@@ -1094,7 +1132,8 @@
+             f"{prefix}_dir_gamma_g_to_rb, "
+             f"{prefix}_dir_gamma_b_to_rg, "
+             f"{prefix}_scan_illuminant, "
+-            f"{prefix}_scan_to_output_rgb"
++            f"{prefix}_scan_to_output_rgb, "
++            f"{1 if monochrome else 0}u, {grain_layer_count}u"
+             "},"
+         )
+     chunks.append(f"constexpr ProfileCurveSet {group_name}_profiles[] = {{")

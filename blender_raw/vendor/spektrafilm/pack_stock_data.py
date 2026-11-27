@@ -14,6 +14,11 @@ import tomllib
 HERE = Path(__file__).resolve().parent
 NEGS_REVISION = "2f5b5703d807e9490801d9155ac30b2c19460551"
 DYEFILMS = ("kodak_ultramax_800", "kodak_vision2_50d", "kodak_vision2_100t", "kodak_vision2_500t")
+# Appended after beta.5's colour order; these positions are serialized in .blend files.
+BW_FILMS = ("kodak_doublex", "kodak_trix", "ilford_hp5_plus", "ilford_fp4_plus",
+            "ilford_delta_3200", "kodak_tmax_100", "fujifilm_acros_100_ii",
+            "kodak_trix400_d76_8min")
+BW_PAPERS = ("kodak_2302", "ilford_mgrc_deluxe_grade2")
 GAMMAS = {
     "same_layer_rgb": "gamma_samelayer_rgb", "r_to_gb": "gamma_interlayer_r_to_gb",
     "g_to_rb": "gamma_interlayer_g_to_rb", "b_to_rg": "gamma_interlayer_b_to_rg",
@@ -26,13 +31,32 @@ def read_json(path):
 
 
 def couplers(info, presets):
-    defaults = presets["defaults"]["color"][info["type"]]
+    model = info["channel_model"]
+    defaults = presets["defaults"][model][info["type"]]
     values = dict(defaults)
-    if info["type"] == "negative" and info["use"] == "cine":
+    if model == "color" and info["type"] == "negative" and info["use"] == "cine":
         temperature = "tungsten" if info["reference_illuminant"].upper().startswith("T") else "daylight"
         values.update(defaults["cine"][temperature])
     values.update(presets.get(info["stock"], {}))
-    return {native: values[source] for native, source in GAMMAS.items()}
+    result = {native: values[source] for native, source in GAMMAS.items()}
+    if model == "bw":
+        # Negs uses only channel zero. Lite broadcasts the scalar to three lanes;
+        # zero cross terms prevent fictitious inter-colour inhibition.
+        result = {key: ([result[key][0]] * 3 if key == "same_layer_rgb" else [0.0, 0.0])
+                  for key in result}
+    return result
+
+
+def reference_time(profile):
+    """Negs profile.rs development_index: explicit normal time, else floor-middle."""
+    data = profile["data"]
+    times = data["development_time"]
+    return data.get("default_development_time", times[(len(times) - 1) // 2])
+
+
+def git_bytes(checkout, path):
+    """Read pinned source objects even when the local checkout is sparse."""
+    return subprocess.check_output(["git", "-C", str(checkout), "show", f"HEAD:{path}"])
 
 
 def pack(negs, dyeworks):
@@ -89,9 +113,36 @@ def pack(negs, dyeworks):
             if len(values) != 3 or not all(math.isfinite(v) for v in values):
                 raise ValueError(f"Invalid TH-KG3 calibration for {film} on {paper}")
             pairs[paper][film] = values
+    colour_films, colour_papers = sorted(films), sorted(papers)
+    bw_times = {}
+    for stock in (*BW_FILMS, *BW_PAPERS):
+        path = source / "profiles" / (stock + ".json")
+        profile = read_json(path)
+        if profile["info"].get("channel_model") != "bw":
+            raise ValueError("Expected a single-channel B&W profile: " + stock)
+        profiles[stock] = profile["info"], path
+        bw_times[stock] = reference_time(profile)
+        if stock in BW_FILMS:
+            dir_calibration[stock] = couplers(profile["info"], presets)
+    # B&W materials have no chromatic filtration calibration. The neutral
+    # enlarger setting is meaningful only on supported B&W negative/B&W print
+    # pairs. The remaining entries are table-shape sentinels, never claims of
+    # measured colour-negative printing; the application rejects those pairs.
+    compatibility = {paper: sorted(all_films) for paper in sorted(all_papers)}
+    for paper in sorted(all_papers):
+        pairs[paper].update({film: [0.0, 50.0, 50.0] for film in BW_FILMS})
+    bw_negatives = [film for film in BW_FILMS if profiles[film][0]["type"] == "negative"]
+    for paper in BW_PAPERS:
+        compatibility[paper] = bw_negatives
+        pairs[paper] = {film: [0.0, 50.0, 50.0] for film in sorted(all_films) + list(BW_FILMS)}
+    films.update(BW_FILMS)
+    papers.update(BW_PAPERS)
     catalog = {
-        "films": sorted(films), "papers": sorted(papers), "print_filters": pairs,
+        "films": colour_films + list(BW_FILMS), "papers": colour_papers + list(BW_PAPERS), "print_filters": pairs,
         "couplers": dir_calibration,
+        "bw_films": list(BW_FILMS), "bw_papers": list(BW_PAPERS),
+        "bw_reference_time": bw_times, "compatible_films": compatibility,
+        "bw_print_filter_note": "[0,50,50] is the neutral enlarger setting; unsupported cross-model entries are sentinels, not calibration.",
     }
     entries[DATA + "stock_catalog.json"] = json.dumps(catalog, indent=2).encode()
     for stock in papers | films:
@@ -101,6 +152,28 @@ def pack(negs, dyeworks):
         entries["Legal/Negs/" + name] = (source / name).read_bytes().replace(b"\r\n", b"\n")
     for name in ("CHANGELOG.txt", "SPEKTRAFILM_LICENSE.txt"):
         entries["Legal/Dyeworks/" + name] = (dyeworks / name).read_bytes().replace(b"\r\n", b"\n")
+    # Keep the experimental preparations auditable without redistributing the
+    # manufacturers' raster/PDF excerpts as independently licensed artwork.
+    source_records = ("README.md", "recipe.json", "trix400-d76-8min.csv",
+                      "trix400-sensitivity.csv", "ilford-mgrc-grade2.csv")
+    for name in source_records:
+        path = "data/profile-sources/bw-expansion/" + name
+        entries["Sources/Negs/" + path] = git_bytes(negs, path).replace(b"\r\n", b"\n")
+    for name in ("prepare.py", "extract_sources.py", "requirements.txt"):
+        path = "scripts/bw_expansion/" + name
+        entries["Sources/Negs/" + path] = git_bytes(negs, path).replace(b"\r\n", b"\n")
+    entries["Sources/Negs/data/presets/couplers.toml"] = (source / "presets/couplers.toml").read_bytes().replace(b"\r\n", b"\n")
+    entries["Sources/README.txt"] = (
+        "Pinned source: https://github.com/noahhaasis/negs/tree/" + NEGS_REVISION + "\n"
+        "B&W profile JSONs and source records are retained without modification.\n"
+        "The experimental preparation records retain all source conditions and limitations.\n"
+        "Manufacturer PDF/raster excerpts are not included in this distribution.\n"
+        "Running the upstream preparation/overlay scripts requires the complete pinned\n"
+        "checkout, its spectral LUT, and the source excerpts acquired under their own rights.\n"
+        "Lite's native rebuild only needs the supplied profile JSONs, not those excerpts.\n"
+        "The upstream preparation/profile data licence is CC BY-SA 4.0; manufacturer\n"
+        "source rights remain with the respective holders. See each source record.\n"
+    ).encode()
     with (HERE / "additional-stock-data.tar.gz").open("wb") as output:
         with gzip.GzipFile(fileobj=output, filename="", mode="wb", mtime=0) as compressed:
             with tarfile.open(fileobj=compressed, mode="w") as archive:

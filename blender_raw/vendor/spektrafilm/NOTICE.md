@@ -36,15 +36,50 @@ See `Legal/Dyeworks/` in the same archive.
 
 Both native builds extract that archive and apply `stock-tables.patch` to the
 pinned generator. Additional film and print IDs are appended. Their TH-KG3
-enlarger filters are required for every selectable pair. Previously shipped
+enlarger filters are required for every selectable colour pair. Previously shipped
 pairs use their original table and original indices. To recreate this data
 archive from the pinned Negs checkout and the Dyeworks release data, run
 `python pack_stock_data.py /path/to/negs /path/to/dyeworks-input`. The second
 directory contains the four stock JSONs, `neutral_print_filters.json`, `couplers.toml`
 and the release's `CHANGELOG.txt` and `SPEKTRAFILM_LICENSE.txt`. Run
 `python pack_stock_grain.py` to regenerate the new stocks' particle areas from
-the supplied layer curves and RMS granularity using the
+the supplied layer curves and RMS granularity and to generate `stock_defaults.json` using the
 [upstream grain model](https://github.com/andreavolpato/spektrafilm/blob/28bf883e1672e884307edc75852549376e13644e/src/spektrafilm/model/grain.py).
+
+Beta.6 appends eight B&W films and two B&W print materials from the same pinned
+Negs revision. Double-X 5222, Tri-X Reversal 7266 and Kodak 2302 retain Andrea
+Volpato's source profiles. HP5 Plus, FP4 Plus, Delta 3200, T-Max 100 and Acros II
+retain the Fotufilm/Negs conversions and their recorded development conditions.
+Tri-X 400 in D-76 for eight minutes and Ilford Multigrade RC Deluxe grade 2 are
+explicitly experimental, source-based preparations by spektrafilm-rs contributors.
+Their conditions, point extractions, fitting assumptions and original attribution
+are retained under `Sources/Negs/` in the data archive. The manufacturer PDF/raster
+excerpts are not redistributed here; their original rights remain in force.
+
+The experimental Ilford profile supports normalized printing of neutral B&W
+negatives at fixed grade 2 without preflash. Its unit spectral weights do not
+characterize colour-negative printing, absolute paper speed, spectral filtration,
+other contrast grades, paper tint or texture. Both B&W prints are restricted to
+B&W negatives. Tri-X Reversal 7266 is scanned directly. The neutral `[0, 50, 50]`
+enlarger setting for B&W carries no chromatic-calibration claim; unsupported
+colour/B&W matrix entries are rejected by the application.
+
+`stock_defaults.json` supplies recommendations for all 64 film choices and
+compatibility metadata for all 14 prints. Source normal development times are
+used when supplied; other B&W families use the floor-middle entry, matching
+Negs. Single-channel optical density is preserved, with no invented RGB dye
+layers. Four-component characteristic-curve and grain models retain all four
+components; the fourth grain component uses the finest supplied particle scale.
+These fitted components are not measurements of physical emulsion layers.
+The source RMS inversion and grain defaults follow Negs; Verita 200D has no
+stock-specific RMS preset and is explicitly marked as using the upstream
+generic schema defaults. Recommendations use the original 20 profiles' matching
+legacy DIR matrices, and the remaining profiles' corresponding source matrices.
+The former 36 added stocks' particle areas and all former colour profile/filter
+values remain unchanged. Existing saved recipe values are independent of these
+selection-time recommendations. Stock-specific grain and halation values are
+loaded with their effects initially disabled; diffusion and scanner effects
+start disabled as well.
 
 For the four original slide stocks, the Python adapter supplies the stock-specific DIR
 matrices from the pinned table generator's `_dir_coupler_defaults()` when the
