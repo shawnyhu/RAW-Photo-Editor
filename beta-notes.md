@@ -1,7 +1,7 @@
-在 Blender 5.3 的 **Preferences → Get Extensions → Install from Disk** 选择 `raw_photo_editor-1.0.2-beta.3.zip`。安装包适用于 Apple Silicon 和 Windows x64。
+在 Blender 5.3 的 **Preferences → Get Extensions → Install from Disk** 选择 `raw_photo_editor-1.0.2-beta.4.zip`。安装包适用于 Apple Silicon 和 Windows x64。
 
-- **Add Scene Effect → Adjust** 提供九种调色卡片，包括 Color Balance、Hue Correct 和 RGB Curves。Spektrafilm Lite 与 OFX 单独成组。自行搭建节点树时选 **Custom Compositor**。
-- **Raw Developer** 的三组设置是 **Camera & Look**、**White Balance**、**Auto Exposure**。曝光补偿在第三组第一行。取消勾选 **As Shot** 即进入 **Spot**，用 **Pick Area** 选择测光位置，也可以切换其他测光模式。已保存的曝光补偿和关键帧继续生效。
-- 在 Photo Workspace 的 Image Viewer 按 **N → Editor → Canvas Background**，可选纯黑、深灰和浅灰。默认纯黑，选择随工作区保存。
+- **Spektrafilm Lite → Presets → Save Current as Preset** 可将当前胶片参数保存为命名预设。在任意工程的 Lite 节点点击预设名即可套用。铅笔可重命名，× 可删除。Live Preview 沿用目标节点的开关状态。
+- 预设按系统用户保存，同一台电脑上更新扩展或 Blender 后可以继续使用。Mac 用户可备份 `~/Library/Application Support/Blender/RAW Photo Editor/Spektrafilm Lite/`。
+- 新建照片工作区时，Image Viewer 默认关闭 **Guides → Grid**。手动开启后，选择随工作区保存。
 
-[用户指南](https://github.com/shawnyhu/RAW-Photo-Editor/blob/e9ee18b2f2f501c63408b27200ce243505b9ce95/docs/workflow.md) · [开发日志](https://github.com/shawnyhu/RAW-Photo-Editor/blob/e9ee18b2f2f501c63408b27200ce243505b9ce95/docs/development-log.md) · [跨平台验证](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45930095218)
+[用户指南](https://github.com/shawnyhu/RAW-Photo-Editor/blob/7f3555e3ebd63dfb1aacb1acd267daad5018fc2d/docs/workflow.md) · [开发日志](https://github.com/shawnyhu/RAW-Photo-Editor/blob/7f3555e3ebd63dfb1aacb1acd267daad5018fc2d/docs/development-log.md) · [跨平台验证](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45947138524)
