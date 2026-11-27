@@ -1,11 +1,5 @@
-name: Extension release
+name: Optional hosted extension validation
 on:
-  pull_request:
-    branches: [main]
-    paths: ['blender_raw/**', 'tests/**', '.github/workflows/release.yml', 'CHANGELOG.md']
-  push:
-    branches: [main]
-    paths: ['blender_raw/blender_manifest.toml', '.github/workflows/release.yml']
   workflow_dispatch:
     inputs:
       macos_runner:
@@ -217,77 +211,3 @@ jobs:
             Get-ChildItem $env:TEMP -Filter '*.crash.txt' | ForEach-Object { Get-Content -LiteralPath $_.FullName -Tail 55 }
           }
           exit $testExitCode
-
-  publish:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Release v')
-    needs: [install-and-test, windows]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency: publish-extension-release
-    env:
-      VERSION: ${{ needs.install-and-test.outputs.version }}
-      PACKAGE: ${{ needs.install-and-test.outputs.filename }}
-      DIGEST: ${{ needs.install-and-test.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/download-artifact@v8
-        with:
-          name: ${{ env.PACKAGE }}
-          skip-decompress: true
-          path: dist-release
-      - uses: actions/download-artifact@v8
-        with:
-          name: raw_photo_editor-source-${{ env.VERSION }}.zip
-          skip-decompress: true
-          path: dist-release
-      - name: Publish the tested ZIP, corresponding source and checksums
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tag="v$VERSION"
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          test "$(git show -s --format=%s HEAD)" = "Release $tag"
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          python3 - <<'PY'
-          import os, pathlib, re
-          version = re.escape(os.environ['VERSION'])
-          log = pathlib.Path('CHANGELOG.md').read_text()
-          section = re.search(rf'^## {version} — [^\n]+\n\n(.+?)(?=^## |\Z)', log, re.M | re.S)
-          if not section:
-              raise SystemExit('Missing changelog entry for the stable version')
-          pathlib.Path('release-notes.md').write_text(section[1].strip() + '\n')
-          PY
-          cd dist-release
-          printf '%s  %s\n' "$DIGEST" "$PACKAGE" > "$PACKAGE.sha256"
-          src="raw_photo_editor-source-$VERSION.zip"
-          sha256sum "$src" > "$src.sha256"
-          sha256sum -c "$PACKAGE.sha256" "$src.sha256"
-          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-            test "$(git rev-list -1 "$tag")" = "$GITHUB_SHA"
-          fi
-          if gh release view "$tag" --json isDraft,targetCommitish > "$RUNNER_TEMP/existing-release.json"; then
-            if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-              test "$(jq -r .targetCommitish "$RUNNER_TEMP/existing-release.json")" = "$GITHUB_SHA"
-            fi
-          else
-            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "RAW Photo Editor $VERSION" --notes-file ../release-notes.md
-          fi
-          # Complete an interrupted draft without ever overwriting a published asset.
-          for file in "$PACKAGE" "$PACKAGE.sha256" "$src" "$src.sha256"; do
-            existing=$(gh release view "$tag" --json assets --jq ".assets[] | select(.name == \"$file\") | .digest")
-            if [[ -n "$existing" ]]; then
-              test "$existing" = "sha256:$(sha256sum "$file" | cut -d' ' -f1)"
-            else
-              test "$(gh release view "$tag" --json isDraft --jq '.isDraft')" = true
-              gh release upload "$tag" "$file"
-            fi
-          done
-          if [[ "$(gh release view "$tag" --json isDraft --jq '.isDraft')" == true ]]; then
-            gh release edit "$tag" --draft=false --prerelease=false --latest
-          fi

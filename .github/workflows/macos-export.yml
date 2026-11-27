@@ -2,16 +2,6 @@ name: Apple Silicon installed export and OFX
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - .github/workflows/macos-export.yml
-      - blender_raw/**
-      - tests/batch_export_format.py
-      - tests/ofx_macos_smoke.py
-      - tests/native_ofx_pipeline.py
-      - tests/fixtures/highlight-chart.dng.gz
-
 permissions:
   contents: read
 

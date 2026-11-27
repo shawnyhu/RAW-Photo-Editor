@@ -8,19 +8,6 @@ on:
         type: choice
         options: [ofx, lite]
         default: ofx
-  pull_request:
-    branches: [main]
-    paths:
-      - .github/workflows/ofx-macos.yml
-      - blender_raw/vendor/spektrafilm_ofx/src/**
-      - blender_raw/vendor/spektrafilm_ofx/include/**
-      - blender_raw/vendor/spektrafilm_ofx/build.py
-      - tests/ofx_macos_smoke.py
-      - blender_raw/ofx_schema.py
-      - blender_raw/ofx_node.py
-      - blender_raw/spektrafilm_ofx_engine.py
-      - blender_raw/vendor/spektrafilm_ofx/parameters.json
-
 permissions:
   contents: read
 

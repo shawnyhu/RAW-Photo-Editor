@@ -71,6 +71,11 @@ macOS 将命令开头的 `& $blender` 换成 `"$blender"`。这条命令使用�
 
 ## 版本与交接
 
-- 查看公开发布的测试范围和结果：[v1.0.1 构建记录](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45360386980)。这一版在 Apple Silicon 构建 ZIP，Windows x64 下载并安装同一个 ZIP。两个平台验证后发布安装包、对应源码和各自的 SHA-256。
-- 更新版本时同步[扩展清单](../blender_raw/blender_manifest.toml)与[变更记录](../CHANGELOG.md)。发布工作流只在满足触发条件时上传 Release：推送到 `main`、包含 manifest 变更、提交标题精确匹配 `Release v<version>`，且平台检查通过。手动运行该工作流可以验证构建。
-- 交接一次实质改动时，在[开发日志](development-log.md)补上版本或提交、复现条件、决定及原因、相关实现、验证环境和未验证项。将可重复的测试命令或公开 CI 链接放入同一条记录，下一位开发者就能判断从哪里继续。
+发布候选包只构建一次。Windows x64 和 Apple Silicon Mac 上的 Codex 分别安装同一份 ZIP 并在本机运行测试。两端对同一 SHA-256 都记录 PASS，即完成版本验收。GitHub Release 使用这份已验收的 ZIP。仓库中的托管工作流只供手动排查问题。
+
+1. 在构建端更新扩展清单和变更记录，从发布提交构建安装包。把 ZIP 原样交给另一台机器。在上面的安装示例中，将变量指向收到的 ZIP，从 `extension install-file` 开始执行。
+2. 在 Windows 运行 `(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()`，在 macOS 运行 `shasum -a 256 "$zip"`。两端分别记录版本、提交、安装包 SHA-256、系统与 Blender 版本、测试项和结果。按本版变更选用对应的测试和交接说明。胶片 Metal 配对使用同一台 Mac 录制的基准。
+3. 汇总两端结果。若需要修复并重新打包，以新 ZIP 的 SHA-256 为准，在两端重新验收。发布时上传已通过的安装包、与它对应的源码 ZIP，以及两份 SHA-256 校验文件。可在发布提交的 checkout 中用 `python3 tools/verify_distribution.py <安装包.zip> <源码包.zip>` 核对安装内容并生成源码包。
+4. 将可重复的测试与结果记入[开发日志](development-log.md)，便于下次换机交接。
+
+历史发布 [v1.0.1 的构建记录](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45360386980)保留了当时两端的测试范围及输出。

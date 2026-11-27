@@ -2,13 +2,6 @@ name: Blender 5.3 offline installer
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - blender_raw/**
-      - tests/**
-      - .github/workflows/installer-windows.yml
-
 permissions:
   contents: read
 
