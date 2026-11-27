@@ -72,3 +72,5 @@
 Raw Developer 按 **Camera & Look**、**White Balance**、**Auto Exposure** 分组。**As Shot** 与 **Meter** 共用旧的 `auto_exposure` 值；取消 As Shot 会选择 Spot。保留所有已保存模式的枚举编号，包括两种早期胶片测光。原生效果卡片仍然使用同一个 Exposure 输入和动画路径。旧工程加载时只调整这个输入的界面可见性。测试覆盖普通节点和效果卡片、两个曝光关键帧、复制、保存重开及旧模式。[测光模式](../blender_raw/metering.py) · [Developer 回归](../tests/developer_meter_controls.py)
 
 查看器的底色由 Photo Workspace 保存。Image Editor 按实际缩放和平移坐标填充照片外的区域，三档颜色分别为黑、深灰和浅灰。回归从真实窗口读取颜色，对比图内半透明像素、相邻图库、全局主题及导出 PNG，并检查工作区设置能随工程保存。[绘制逻辑](../blender_raw/viewer_background.py) · [窗口测试](../tests/viewer_background_ui.py)
+
+测试包对应提交 [e9ee18b](https://github.com/shawnyhu/RAW-Photo-Editor/commit/e9ee18b2f2f501c63408b27200ce243505b9ce95)。Windows 本地用 beta.2 创建工程，再用 beta.3 重开，核对四种已存测光模式、原生曝光输入上的两帧动画以及两个既有自定义效果。公开 CI 在 Apple Silicon 的 Blender 5.3.0 窗口检查了九张卡片的实际控件、曲线编辑器和查看器三档背景；Windows x64 安装同一份 ZIP 完成后台回归。安装包 SHA-256 为 `47f288cd7b94da275f651117dc8cf43df20570eb2f75f1a6af2a9bb3636d2460`。[验证记录](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45930095218)
