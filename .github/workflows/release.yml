@@ -68,6 +68,7 @@ jobs:
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_settings.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_added_calibration.py
           "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_stock_defaults.py
+          "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_processing.py
           for stage in write use; do
             "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_preset_flow.py -- "$stage" "$RUNNER_TEMP/film-user-presets"
           done
@@ -98,6 +99,7 @@ jobs:
             "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_color_compatibility.py -- compare "$baseline"
             "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_added_calibration.py -- --pixels
             "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_stock_defaults.py -- --pixels
+            "$BLENDER" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_processing.py -- --pixels
           else
             echo 'SKIP actual Metal acceptance: runner has no usable GPU; requires a physical Mac.'
           fi
@@ -179,6 +181,8 @@ jobs:
           & $blender -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_added_calibration.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           & $blender -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_stock_defaults.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $blender -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_processing.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           foreach ($stage in 'write', 'use') {
             & $blender -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_preset_flow.py -- $stage "$env:RUNNER_TEMP/film-user-presets"

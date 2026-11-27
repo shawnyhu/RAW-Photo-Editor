@@ -42,6 +42,7 @@ export BLENDER_USER_RESOURCES="$test_root/beta6-profile"
 "$blender" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_added_calibration.py -- --pixels
 "$blender" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_calibration.py
 "$blender" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_settings.py
+"$blender" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_processing.py -- --pixels
 "$blender" -b --offline-mode --python-exit-code 1 --python tests/native_install_smoke.py
 for stage in write use; do
   "$blender" -b --offline-mode --python-exit-code 1 --python tests/spektrafilm_user_preset_flow.py -- "$stage" "$test_root/personal-presets"
@@ -60,6 +61,7 @@ done
 - 第二张卡片活动时，点击第一张卡片的 Film 仍只更新第一张；选择 HP5 后自动切到对应黑白 Print，Print 菜单只列出支持的黑白材料。
 - 切换 Kodak / Fujifilm 彩色负片、反转片及黑白片，推荐材料、模式与可见参数同步更新。切回 Film 会恢复推荐值；保存并重新应用个人预设会恢复用户效果。
 - DIR 不再出现在 Lite 控件中。个人 Presets 菜单中没有那四份系统内置项，既有同名个人副本仍可管理。
+- RGB to Raw 的三种方法、Film Format 的八种画幅和 Film Push / Pull Stops（−2 到 +2）均可编辑，实际渲染生效；画幅应在开启颗粒/光晕时比较。检查个人预设、旧隐藏参数与保存重开能正确恢复这三项。
 - Live Preview 开关保持目标卡片的值；导出 EXR 像素正常。
 
 截图至少包含完整 Film 菜单、黑白 Print 菜单，以及真实点击前后的两张卡片。节点值断言与事件日志一并保留；相同截图不当作前后效果证据。

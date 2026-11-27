@@ -93,13 +93,17 @@ def _draw_picker(layout, node, kind):
     row = layout.row()
     for brands in _columns(groups, kind):
         column = row.column(align=True)
-        column.scale_y = .9
+        column.scale_y = .8 if kind == "film" else .9
         for brand_index, (brand, brand_categories) in enumerate(brands):
             if brand_index:
                 column.separator()
             heading = column.row()
             heading.alignment = "LEFT"
-            heading.label(text=brand)
+            # Menu labels use the menu-background text colour and ignore the
+            # disabled state. The native unembossed-label style restores the
+            # normal theme text colour for brand headings, without a button.
+            heading.emboss = "NONE"
+            heading.label(text=brand.upper())
             column.separator(factor=.4)
             categories = _CATEGORIES if kind == "film" else ("Color Print", "B&W Print")
             for category in categories:

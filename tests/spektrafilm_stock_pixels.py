@@ -40,7 +40,8 @@ def stock_pairs(node, image, films, papers):
             yield engine.render(image, **film_node.recipe(node))
 
 
-def run(mode, path):
+def run(mode, path, *flags):
+    assert set(flags) <= {"--legacy-only"}, flags
     if mode == "record-if-available" and (error := engine.backend_error()):
         print("Previous renderer unavailable on this runner:", error)
         return
@@ -69,6 +70,8 @@ def run(mode, path):
                 if (i + 1) % 40 == 0:
                     print(f"Compared {i + 1}/160 original pairs", flush=True)
             print(f"PASS {len(old_films) * len(old_papers)} original pairs, exact GPU pixels and indices", flush=True)
+            if "--legacy-only" in flags:
+                return
             # Exercise both sides of the new filter table, including all-new pairs.
             # A missing or misindexed filter can collapse the chart to black or white.
             count = 0

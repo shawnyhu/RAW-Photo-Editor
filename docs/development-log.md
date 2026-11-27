@@ -131,3 +131,15 @@ Apple Silicon 取自[最终构建](https://github.com/shawnyhu/RAW-Photo-Editor/
 开发中发现 Negs 的黑白 JSON 缓存曲线与其 norm-CDF 参数模型存在差异。按上游加载过程重建参考显影时间的曲线和全部拟合层，再生成颗粒校准。彩色资料、旧索引和旧计算路径保持原值。详细来源及实验限制见 vendor/spektrafilm/NOTICE.md、CHANGELOG.txt 和 additional-stock-data.tar.gz。
 
 先在已验收 beta.5 的独立配置录制 RTX 4090 上 672 组彩色配方及 60 个旧节点，基准 SHA-256 为 `1525a58ef77a52c67a09d7946e7c0da9a691ee8610ceeaf23c6a5fe16d2cdfc8`，未覆盖 beta.4 的 160 组基准。首轮新原生库与这 672 组像素完全一致，60 个节点保存值不变；这是开发阶段结果。最终包的验收结果将在构建完成后追加。Mac beta.5 的通过结果不自动延伸到本版；本版需依据 [Mac 验收交接](spektrafilm-beta6-mac-handoff.md)重测。
+
+**最终控件与交付验收。** 恢复 RGB to Raw（3 个方法）、Film Format（8 个画幅）和 Film Push / Pull Stops（−2..2）。前两项放在 Film 上方，Push/Pull 放在 Print 之后。原隐藏 JSON 作为控件初值，RNA 显式编辑覆盖它；未编辑的旧 JSON 精度和缺省字段保持，个人预设和 `.sfpreset` 导入会清除目标上遗留的 RNA 覆盖。默认选择为 Hanatos 2026、Standard 35、0 stops。相关实现为 `film_processing.py`、`film_node.py` 和 `film_user_settings.py`，实际像素和持久化覆盖在 `tests/spektrafilm_processing.py`。
+
+菜单按五列排列，品牌使用亮色大写、类别灰色；原生标签样式实现明暗，不改用户主题。两种窗口尺寸实测品牌/类别/型号文字亮度峰值约 230/153/229。恢复按钮采用左侧 Film Defaults 标签、右侧与参数输入区等宽的图标按钮；Film 菜单稍缩行距，保证 1200×850 下全部 64 项可见。
+
+Windows 最终安装包 SHA-256 为 `f78629f4be4f0630856470d55feaf3e819e803e8ae204c65c5c9430a7ba60c8f`。在 Blender 5.3.0、RTX 4090 的全新配置离线安装后通过：beta.4 原有 160 组逐像素一致；64 款推荐、15 条黑白路径、24 组黑白颗粒实际渲染；三个恢复控件有真实像素变化；44 款新增材料校准及保存重开；完整个人预设、旧导入与 Live Preview；原生 Scene / EXR 像素导出；1200×850、1600×1000 两尺寸真实菜单选择、恢复图标及非活动卡片预设点击。
+
+本版最终原生库和渲染配方还通过全部 672 组 beta.5 彩色配方及 168 组彩色颗粒/光晕逐像素一致检查，60 个旧节点的 recipe/snapshot 不变。最后的显示调整与该已渲染安装包逐文件比较，差异仅在 `film_node._draw_stocks`、`film_stock_ui._draw_picker` 两个显示函数；原生库、数据和其余 Python AST 一致。交付 ZIP 重跑上述 160 组、黑白与控件测试。证据分开保存在 `dist/beta6-validation/final3/` 和 `delivery3/`，未用重录基准规避差异。168 组 Windows 基准 SHA-256 为 `029b65ef083f50dbc5d65eff19bcc006513693efeb05483c1b934c2b46f56979`。
+
+独立 Windows 完整重建与现有产物逐字一致，DLL SHA-256 为 `3a655f7e89d1688090c527eac743729ce8315b7df4356818f709ed9e6c8ba90f`；Vulkan 全幅/分块对照 max_abs、rms 和接缝误差均为 0。永久源模型测试通过 1450 个原彩色数组、10 个黑白材料及独立 RMS 反算。
+
+Apple Silicon 最终 [CI 构建 45967123111](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45967123111) 在 macOS 26.7.2 完成 arm64 编译、严格代码签名、64/14 原生校准与 Metal 3.0 离线编译。dylib SHA-256 为 `be004f5491f3562af62bf1705c1b5f2cce73ef90e8158fb4379ede613156344f`，同组 Metal 内核为 `cc8f3ad6b2f36a862b1dae61f8a2ccbe04c1921a43dc181ffb1f2626f6c3227b`。数据包、模型 patch、推荐 JSON 摘要与 Windows 完全相同。早期 CI 分别遇到 Python 3.15 与固定 Colour 依赖不兼容、旧 macOS SDK 缺少计时 API，改为 Python 3.13 和 beta.5 已使用的 macOS 26 SDK 后通过。**本版实际 Metal GPU 像素尚待用户 Mac 按交接 prompt 验收**，本条不把编译成功计作实际 Metal 渲染通过。

@@ -4,6 +4,7 @@ import json
 
 from . import film_node, spektrafilm_engine as engine
 from .film_effects import BY_KEY, DIR_MATRIX_PARAMETERS, FAMILIES, FIXED_EXPOSURES, GRAIN_MODELS, PROCESS_MODES
+from .film_processing import PARAMETERS as PROCESSING_PARAMETERS, explicit_parameters
 
 
 _BASE = ("film", "paper", "process", "scanNegativeInvert", "grain", "grain_model", "halation")
@@ -32,7 +33,8 @@ def snapshot(node):
         raise ValueError("Invalid stored Spektrafilm settings")
     settings = {
         "controls": controls,
-        "parameters": {key: value for key, value in original.items() if key not in _EXCLUDED_NATIVE},
+        "parameters": {key: value for key, value in original.items() if key not in _EXCLUDED_NATIVE}
+                      | explicit_parameters(node),
         "calibration_film": node.preset_film,
         "use_stock_calibration": node.use_stock_calibration,
     }
@@ -82,7 +84,7 @@ def _validated_values(settings):
 
 
 def _replace(node, values):
-    for key in (*_METADATA, *_CONTROLS):
+    for key in (*_METADATA, *_CONTROLS, *PROCESSING_PARAMETERS):
         if key in values:
             setattr(node, key, values[key])
         elif node.is_property_set(key):
@@ -93,7 +95,8 @@ def apply(node, settings):
     values = _validated_values(settings)
     # Capture explicitly stored properties so rollback also restores unset DIR
     # coefficients and the name of any legacy imported look.
-    previous = {key: _value(node, key) for key in (*_METADATA, *_CONTROLS) if node.is_property_set(key)}
+    previous = {key: _value(node, key) for key in (*_METADATA, *_CONTROLS, *PROCESSING_PARAMETERS)
+                if node.is_property_set(key)}
     pointer = node.as_pointer()
     film_node._applying_user_preset.add(pointer)
     try:

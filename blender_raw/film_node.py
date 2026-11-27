@@ -9,6 +9,7 @@ from bpy.props import BoolProperty, EnumProperty, FloatProperty, FloatVectorProp
 
 from . import spektrafilm_engine
 from .film_effects import BY_KEY, DIR_MATRIX_PARAMETERS, FAMILIES, FIXED_EXPOSURES, FLOW_SECTIONS, GRAIN_MODELS, GROUPS, PROCESS_MODES
+from .film_processing import FILM_FORMATS, PARAMETERS as PROCESSING_PARAMETERS, RGB_TO_RAW_METHODS, explicit_parameters
 
 
 FILM_TYPE = "BlenderPhotoSpektrafilm"
@@ -52,6 +53,7 @@ def recipe(node):
                 settings["parameters"][key] = value
     settings["parameters"].update(process=PROCESS_MODES.index(node.process),
                                   scanNegativeInvert=node.scanNegativeInvert)
+    settings["parameters"].update(explicit_parameters(node))
     return settings
 
 
@@ -64,7 +66,7 @@ def load_preset(node, path):
     pointer = node.as_pointer()
     _applying_user_preset.add(pointer)
     try:
-        for prop in film_preset.NODE_PROPERTIES.values():
+        for prop in (*film_preset.NODE_PROPERTIES.values(), *PROCESSING_PARAMETERS):
             if prop in fields:
                 setattr(node, prop, fields[prop])
             elif node.is_property_set(prop):
@@ -251,6 +253,10 @@ def apply_stock_defaults(node, film=None):
         node.preset_parameters = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
         node.preset_film = stock
         node.use_stock_calibration = True
+        # Native defaults (Hanatos 2026, Standard 35, zero push/pull) stay
+        # implicit, preserving the representation of untouched old recipes.
+        for key in PROCESSING_PARAMETERS:
+            node.property_unset(key)
         for key, effect in BY_KEY.items():
             value = parameters.get(key, effect.default)
             if isinstance(effect.default, int) and not isinstance(effect.default, bool):
@@ -385,6 +391,18 @@ class BR_NODE_spektrafilm(bpy.types.CompositorNodeCustomGroup):
                          search=_films, options=set(), update=_film_changed)
     paper: StringProperty(name="Print", description="Print stock; leave empty for the engine default",
                           search=_papers, options=set(), update=_request)
+    rgbToRawMethod: EnumProperty(name="RGB to Raw",
+                                description="Spectral reconstruction method used to expose the film",
+                                items=[(name, name, "", index) for index, name in enumerate(RGB_TO_RAW_METHODS)],
+                                default=RGB_TO_RAW_METHODS[0], get_transform=_preset_parameter("rgbToRawMethod"),
+                                update=_request)
+    filmFormat: EnumProperty(name="Film Format",
+                             description="Film frame size used to scale grain, halation and optical effects",
+                             items=[(name, name, "", index) for index, name in enumerate(FILM_FORMATS)],
+                             default=FILM_FORMATS[4], get_transform=_preset_parameter("filmFormat"), update=_request)
+    filmPushPullStops: FloatProperty(name="Film Push / Pull Stops", description="Film development push or pull in stops",
+                                     default=0.0, min=-2.0, max=2.0, precision=2,
+                                     get_transform=_preset_parameter("filmPushPullStops"), update=_request)
     exposure: FloatProperty(name="Film Exposure", options={"HIDDEN"}, set_transform=_zero_ev)
     print_exposure: FloatProperty(name="Print Exposure", options={"HIDDEN"}, set_transform=_zero_ev)
     grain: BoolProperty(name="Grain", default=False, update=_request)
@@ -435,13 +453,26 @@ class BR_NODE_spektrafilm(bpy.types.CompositorNodeCustomGroup):
         if self.preset_name:
             layout.label(text=self.preset_name)
         layout.prop(self, "process")
+        layout.prop(self, "rgbToRawMethod")
+        layout.prop(self, "filmFormat")
         if self.process != PROCESS_MODES[2]:
             film_stock_ui.draw_stock(layout, self, "film")
-            _action(layout, "blender_raw.restore_film_defaults", self, "Restore Film Defaults", "LOOP_BACK")
+            defaults = layout.split(factor=.4, align=True)
+            label = defaults.row()
+            label.alignment = "RIGHT"
+            label.label(text="Film Defaults")
+            button = defaults.row(align=True)
+            button.alignment = "EXPAND"
+            # Empty text creates a fixed-width icon button; whitespace keeps
+            # the native parameter-width button while showing only its icon.
+            _action(button, "blender_raw.restore_film_defaults", self, " ", "LOOP_BACK")
         if self.process == PROCESS_MODES[1]:
             layout.prop(self, "scanNegativeInvert")
         else:
             film_stock_ui.draw_stock(layout, self, "paper")
+        development = layout.row()
+        development.active = self.process != PROCESS_MODES[2]
+        development.prop(self, "filmPushPullStops", text="Push / Pull")
 
     def _draw_effects(self, layout, *, native_panels=False):
         for key, label, enabled, properties in FLOW_SECTIONS:

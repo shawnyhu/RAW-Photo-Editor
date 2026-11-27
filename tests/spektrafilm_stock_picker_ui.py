@@ -125,7 +125,7 @@ def window_checks():
             assert target.id_data.name in layout and target.name in layout, layout
             # UILayout.introspect omits icons; the saved screenshot exposes
             # the current-selection checkmark for visual review.
-            assert "Kodak" in layout and "Fujifilm" in layout, layout
+            assert "KODAK" in layout and "FUJIFILM" in layout, layout
             if kind == "film":
                 assert "Color Negative" in layout and "Slide" in layout, layout
                 if "kodak_doublex" in engine.stocks()[0]:
@@ -193,16 +193,17 @@ def click_checks():
         yield from click(window, region.x + 43 * scale, top - 172 * scale)
         screenshot("click-before-film")
         window.scene.compositor_effects.active = second
-        yield from click(window, region.x + 180 * scale, top - 304 * scale)
+        yield from click(window, region.x + 180 * scale, top - 366 * scale)
         screenshot("click-film-open")
         assert draws, "Click did not open the Film picker"
         assert draws[-1][0] == target.as_pointer()
         assert all(stock in draws[-1][1] for stock in engine.stocks()[0]), draws[-1][1]
+        assert "KODAK" in draws[-1][1] and "FUJIFILM" in draws[-1][1]
         assert window.scene.compositor_effects.active == second
         # Fifth column, first B&W item: HP5 Plus. At factory 125% scale the
         # compact menu is clamped to the right window edge and fits below
         # the Film button at both tested laptop/desktop window sizes.
-        yield from click(window, window.width - 150 * scale, top - 375 * scale)
+        yield from click(window, window.width - 150 * scale, top - 431 * scale)
         screenshot("click-after-film")
         assert target.film == "ilford_hp5_plus", target.film
         assert target.paper == "ilford_mgrc_deluxe_grade2", target.paper
@@ -211,16 +212,27 @@ def click_checks():
         draws.clear()
         ui.BR_MT_print_stock_picker.append(inspect)
         try:
-            yield from click(window, region.x + 180 * scale, top - 366 * scale)
+            yield from click(window, region.x + 180 * scale, top - 428 * scale)
             screenshot("click-print-open")
             assert draws and draws[-1][0] == target.as_pointer()
-            yield from click(window, window.width - 850 * scale, top - 437 * scale)
+            yield from click(window, window.width - 850 * scale, top - 499 * scale)
             screenshot("click-after-print")
             assert target.paper == "kodak_2302", target.paper
             assert target.film == "ilford_hp5_plus" and not target.live_preview
             assert active.film == "fujifilm_provia_100f" and abs(active.grainAmount - .345) < 1e-6
             assert window.scene.compositor_effects.active == second
-            print(f"PASS actual stock clicks at {window.width}x{window.height}: non-active Film -> HP5 -> Print -> 2302; active card unchanged", flush=True)
+            target.grainAmount = .2
+            assert abs(target.grainAmount - .2) < 1e-6
+            # Hit the right end of the parameter column. An icon-sized button
+            # at the left cannot pass this full-width hit-area regression.
+            restore_x = region.x + region.width - 32 * scale
+            yield from click(window, restore_x, top - 395 * scale)
+            screenshot("click-after-restore")
+            assert abs(target.grainAmount - 1.) < 1e-6, target.grainAmount
+            assert target.film == "ilford_hp5_plus" and target.paper == "ilford_mgrc_deluxe_grade2"
+            assert not target.live_preview and window.scene.compositor_effects.active == second
+            assert active.film == "fujifilm_provia_100f" and abs(active.grainAmount - .345) < 1e-6
+            print(f"PASS actual stock clicks at {window.width}x{window.height}: non-active Film -> HP5 -> Print -> 2302 -> restore icon; active card unchanged", flush=True)
         finally:
             ui.BR_MT_print_stock_picker.remove(inspect)
     finally:
