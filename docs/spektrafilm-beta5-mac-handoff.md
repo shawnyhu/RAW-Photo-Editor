@@ -1,5 +1,7 @@
 # Spektrafilm Lite beta.5 · Mac 验收交接 prompt
 
+状态更新（2026-11-27）：已收到用户 Apple M1 实机报告，17 项验收阶段全部 PASS；详情和证据范围见[开发日志](development-log.md)。以下保留原始交接 prompt，供其他 Mac 复验。
+
 将下面的内容交给 Apple Silicon Mac 上的 Codex，并提供本次安装包与对应源码包。手动试用可直接在 Blender 5.3 的 Preferences → Get Extensions → Install from Disk 安装 ZIP。
 
 ---

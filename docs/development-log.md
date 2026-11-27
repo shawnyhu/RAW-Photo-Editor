@@ -85,7 +85,7 @@ Grid 只在创建照片工作区查看器时设置默认值。Windows 5.3.0 窗�
 
 公开测试包对应提交 [7f3555e](https://github.com/shawnyhu/RAW-Photo-Editor/commit/7f3555e3ebd63dfb1aacb1acd267daad5018fc2d)。Apple Silicon 和 Windows x64 用 Blender 5.3.0 安装同一个 ZIP，通过了两次独立启动之间的预设保存与调用。另在 Windows 将同一个系统账户指向两个全新的插件安装配置，使用真实的用户预设路径，第二套配置仍可读取第一套保存的胶片参数。之后的 Blender 大版本需在对应版本发布时再次验证扩展兼容性。安装包 SHA-256 为 `d7704cb93d17570b729f85c927fdf5bf5effa76b28d6f0b6252d3ea654eec55f`。[跨平台验证记录](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/45947138524)
 
-## 2026-11-27 · Lite 完整内置预设与材料扩充（1.0.2-beta.5，待 Mac 实机验收）
+## 2026-11-27 · Lite 完整内置预设与材料扩充（1.0.2-beta.5）
 
 四份用户保存的 FUJI Pro 400H、FUJI Provia100f、KODAK Ektar 100、KODAK Portra 800 JSON 原样内置，按字节与原件核对。应用时恢复完整配方，保留目标 Live Preview；同名个人副本继续独立保存、重命名和删除。[资源](../blender_raw/assets/film_presets/) · [预设库](../blender_raw/film_user_library.py) · [跨进程验收](../tests/spektrafilm_user_preset_flow.py)
 
@@ -104,4 +104,16 @@ Apple Silicon 取自[最终构建](https://github.com/shawnyhu/RAW-Photo-Editor/
 
 源码打包检查现覆盖允许目录中的未忽略、未跟踪文件，显式要求附带新增数据、两个生成脚本、grain 表、patch、配对滤镜、四份预设以及五份来源许可/归属文件。安装包逐文件与工作副本及源码包核对。[分发检查](../tools/verify_distribution.py)
 
-安装包 SHA-256：`178331fa74af838e1eda53d1c8f8896cd957a8ac97afe7f7295472aaee5e309d`。本地日志在 `dist/beta5-final-validation/`，原生构建证据在 `dist/stock-rebuild/`。beta.5 尚未正式发布。Mac CI 本次仅提供构建证据，未执行最终包的 160 组 Metal 像素对照；用户提供 Apple Silicon 实机继续验收。[Mac Codex 交接 prompt](spektrafilm-beta5-mac-handoff.md)要求在同机分别安装 beta.4 与本包，用 `record` 与 `compare` 实渲染，保留逐项结果和日志。
+安装包 SHA-256：`178331fa74af838e1eda53d1c8f8896cd957a8ac97afe7f7295472aaee5e309d`。本地日志在 `dist/beta5-final-validation/`，原生构建证据在 `dist/stock-rebuild/`。测试包对应提交 `bf0247d`，已发布为 [v1.0.2-beta.5 预发布版](https://github.com/shawnyhu/RAW-Photo-Editor/releases/tag/v1.0.2-beta.5)。Mac CI 本次仅提供构建证据；随后依据[Mac Codex 交接 prompt](spektrafilm-beta5-mac-handoff.md)在用户实机完成的结果见下条记录。
+
+## 2026-11-27 · Apple M1 实际 Metal 验收回传（1.0.2-beta.5）
+
+用户回传 Mac Codex 的实机验收摘要：macOS 26.7.3、Apple M1 七核 GPU、Metal 4、Blender 5.3.0。使用用户启动的桌面会话，在独立 Blender 配置中离线安装最终包，全程无需 OFX，报告的 17 项验收阶段全部 PASS。安装包及 arm64 dylib 摘要与本地和 GitHub 已发布文件一致，dylib 严格签名检查通过。
+
+- 在该 M1 上用 beta.4 的 `record` 生成基准，再用最终 beta.5 `compare`：原有 160/160 配对逐像素完全一致，胶片与印片索引一致；512/512 新增配对全部实际渲染，输出有限且灰阶非平坦。Mac 基准 SHA-256 为 `7c46106d07774f78d4dc4817e288d6227692c866cc1682900bde08a921ca3759`，按报告以只读方式保留。
+- 四款 Dyeworks 全部 DIR 分组、Portra→Velvia、负片/反转片/印片/颗粒渲染通过。36 款新增胶片保存重开后保留印片选择与编辑参数。
+- 四份完整预设恢复全部参数并保留目标 Live Preview；同名个人副本可独立重命名、删除。真实窗口菜单包含四份预设；第二张卡片活动时，对第一张卡片的预设点击只修改第一张。原生 EXR 导出像素通过。
+
+首次受限进程无法访问 Metal 的失败日志已由 Mac 端保留；最终通过结果来自用户启动的桌面会话。两张窗口截图内容相同，不能充当前后视觉变化对照；点击行为的证据为真实窗口事件及节点数值断言。
+
+本条依据用户回传报告摘要记录。当前 Windows 会话未能读取用户 ChatGPT Library 中的原始验收归档，尚未独立复核该归档的日志、基准与截图；上述 Mac 结果不计作 Windows 端重跑或 CI 结果。当前验收覆盖 Windows RTX 4090/Vulkan 与该 Apple M1/Metal 两套环境。保留已验收安装包和原生库字节及原标签，在原预发布页补充 Mac 报告，不重新构建安装包。
