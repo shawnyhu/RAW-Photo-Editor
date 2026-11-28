@@ -40,24 +40,30 @@ def equal(actual, expected, label):
         np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-6, err_msg=label)
 
 
-def recommended(node, stock):
+def recommended(node, stock, choices=None):
     """Check the public recipe's field mapping, including every editable effect."""
+    choices = choices or {}
     record = engine.stock_defaults(stock)
     settings = film_node.recipe(node)
     assert node.film == stock
     assert node.process == ("Negative only" if record["type"] == "positive" else "Full Film Sim"), stock
     assert node.paper == (record["target_print"] or ""), (stock, node.paper, record["target_print"])
-    assert not node.scanNegativeInvert and not node.grain and not node.halation, stock
-    assert node.grain_model == "Preview" and not node.preset_name, stock
+    assert not node.scanNegativeInvert and not node.preset_name, stock
+    for key in ("grain", "halation"):
+        assert getattr(node, key) == settings[key] == choices.get(key, False), (stock, key)
+    assert node.grain_model == choices.get("grain_model", "Preview"), stock
+    assert settings["grain_model"] == GRAIN_MODELS.index(node.grain_model), stock
     assert settings["exposure"] == settings["print_exposure"] == 0.0, stock
-    assert settings["grain_model"] == 0 and not settings["grain"] and not settings["halation"], stock
     assert settings["parameters"]["process"] == (1 if record["type"] == "positive" else 0), stock
     assert settings["parameters"]["scanNegativeInvert"] is False, stock
     for key, effect in BY_KEY.items():
         expected = record["parameters"].get(key, effect.default)
-        value = getattr(node, key)
-        equal(value, FAMILIES[expected] if isinstance(value, str) else expected, f"{stock}: node {key}")
-        equal(settings["effects"][key], expected, f"{stock}: recipe {key}")
+        if type(effect.default) is int:
+            expected = FAMILIES[expected]
+        expected = choices.get(key, expected)
+        equal(getattr(node, key), expected, f"{stock}: node {key}")
+        native = FAMILIES.index(expected) if isinstance(expected, str) else expected
+        equal(settings["effects"][key], native, f"{stock}: recipe {key}")
     for key, expected in record["parameters"].items():
         engine.validate_parameter(key, expected)
         actual = settings["effects"] if key in BY_KEY else settings["parameters"]
@@ -103,10 +109,20 @@ def check_catalog_and_selection(tree):
     for index, stock in enumerate(films):
         node.film = films[(index + 1) % len(films)]
         edit_every_effect(node)
+        choices = {
+            "grain": bool(index & 1), "halation": bool(index & 2),
+            "cameraDiffusionEnabled": bool(index & 4), "scannerEnabled": bool(index & 8),
+            "printDiffusionEnabled": bool(index & 16),
+            "grain_model": GRAIN_MODELS[index % len(GRAIN_MODELS)],
+            "cameraDiffusionFamily": FAMILIES[index % len(FAMILIES)],
+            "printDiffusionFamily": FAMILIES[(index + 1) % len(FAMILIES)],
+        }
+        for key, value in choices.items():
+            setattr(node, key, value)
         node.live_preview = index % 2 == 0
         live = node.live_preview
         node.film = stock
-        recommended(node, stock)
+        recommended(node, stock, choices)
         assert node.live_preview == live and node.instance_uid == original_uid and node.node_tree == original_group
 
         choices = engine.compatible_papers(stock)
@@ -127,10 +143,10 @@ def check_catalog_and_selection(tree):
         engine.validate_stock_pair(stock, wrong_paper, 1)
 
         edit_every_effect(node)
-        film_node.apply_stock_defaults(node)
+        assert bpy.ops.blender_raw.restore_film_defaults(tree_name=tree.name, node_name=node.name) == {"FINISHED"}
         recommended(node, stock)
         assert node.live_preview == live and node.instance_uid == original_uid and node.node_tree == original_group
-    print("PASS 64 Film selections and Restore: complete recommended controls, calibration and Print filtering", flush=True)
+    print("PASS 64 Film selections preserve effect choices and load stock parameters; Film Defaults restores all controls", flush=True)
     return node
 
 
@@ -226,6 +242,22 @@ def check_pixels(node):
     error = engine.backend_error()
     assert not error, f"Actual native GPU required for --pixels: {error}"
     image = chart()
+    # Compare switching to Verita against setting up the same look from its defaults.
+    node.grain, node.grain_model = True, "Production"
+    node.cameraDiffusionEnabled, node.cameraDiffusionFamily = True, "Black Pro-Mist"
+    node.grainParticleAreaUm2, node.cameraDiffusionStrength = 2., 1.5
+    result = bpy.ops.blender_raw.choose_film_stock(tree_name=node.id_data.name, node_name=node.name,
+                                                 kind="film", stock="kodak_verita_200d")
+    assert result == {"FINISHED"} and node.film == "kodak_verita_200d"
+    switched = render_checked(node, image)
+    film_node.apply_stock_defaults(node)
+    clean = render_checked(node, image)
+    node.grain, node.grain_model = True, "Production"
+    node.cameraDiffusionEnabled, node.cameraDiffusionFamily = True, "Black Pro-Mist"
+    np.testing.assert_array_equal(switched, render_checked(node, image))
+    assert np.max(np.abs(switched - clean)) > 1e-5
+    print("PASS switched Verita 200D pixels match Production grain and Black Pro-Mist on stock parameters", flush=True)
+
     films, _papers = engine.stocks()
     for index, stock in enumerate(films, 1):
         film_node.apply_stock_defaults(node, stock)

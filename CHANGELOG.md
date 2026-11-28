@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 — 2026-11-28
+
+- Switching films in **Spektrafilm Lite** keeps the effect switches, Grain Model and diffusion filter. Other settings, including particle area, halation strength and the recommended print, follow the selected film. **Film Defaults** still restores the full recommendation.
+
 ## 1.1.0 — 2026-11-27
 
 Install `raw_photo_editor-1.1.0.zip` from **Preferences → Get Extensions → Install from Disk** in Blender 5.3 or later on Apple Silicon or Windows x64.

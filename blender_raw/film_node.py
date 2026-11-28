@@ -223,17 +223,13 @@ def _film_changed(node, _context=None):
     except (OSError, RuntimeError):
         valid = False
     if valid:
-        apply_stock_defaults(node, stock)
+        apply_stock_defaults(node, stock, preserve_effect_choices=True)
         return
     _request(node)
 
 
-def apply_stock_defaults(node, film=None):
-    """Load a complete stock recipe on creation or explicit user selection.
-
-    Never called while loading a saved node or applying a personal preset.
-    Live Preview and the photo's upstream adjustments belong to the destination.
-    """
+def apply_stock_defaults(node, film=None, *, preserve_effect_choices=False):
+    """Apply the stock recipe. The Film picker keeps effect switches and model choices."""
     stock = film or _current_film(node)
     record = spektrafilm_engine.stock_defaults(stock)
     parameters = record["parameters"]
@@ -246,8 +242,9 @@ def apply_stock_defaults(node, film=None):
         node.paper = record["target_print"] or ""
         node.process = PROCESS_MODES[1 if record["type"] == "positive" else 0]
         node.scanNegativeInvert = False
-        node.grain = node.halation = False
-        node.grain_model = GRAIN_MODELS[0]
+        if not preserve_effect_choices:
+            node.grain = node.halation = False
+            node.grain_model = GRAIN_MODELS[0]
         node.preset_name = ""
         # Drop the previous look's hidden gamma, filters and process overrides.
         node.preset_parameters = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
@@ -258,6 +255,11 @@ def apply_stock_defaults(node, film=None):
         for key in PROCESSING_PARAMETERS:
             node.property_unset(key)
         for key, effect in BY_KEY.items():
+            if preserve_effect_choices and key in {
+                "cameraDiffusionEnabled", "cameraDiffusionFamily",
+                "printDiffusionEnabled", "printDiffusionFamily", "scannerEnabled",
+            }:
+                continue
             value = parameters.get(key, effect.default)
             if isinstance(effect.default, int) and not isinstance(effect.default, bool):
                 value = FAMILIES[value]

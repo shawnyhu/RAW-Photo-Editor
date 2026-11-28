@@ -84,12 +84,13 @@ def run():
             assert film_user_settings.snapshot(target) == settings and target.live_preview == live
         target.film = "kodak_portra_800"
         assert target.use_stock_calibration and target.is_property_set("dirGammaBToRg")
-        assert not target.grain and target.process == "Full Film Sim"
+        assert target.grain and target.grain_model == "Grain Synthesis" and target.process == "Full Film Sim"
         target.film = source.film
         expected_dir = spektrafilm_engine.stock_defaults(source.film)["parameters"]["dirGammaRToGb"]
         assert all(abs(a - b) < 1e-6 for a, b in zip(target.dirGammaRToGb, expected_dir))
         assert list(target.dirGammaRToGb) != list(source.dirGammaRToGb)
-        assert not target.cameraDiffusionEnabled and not target.grain
+        assert not target.cameraDiffusionEnabled and target.cameraDiffusionFamily == "CineBloom"
+        assert target.grain and target.grain_model == "Grain Synthesis"
         film_user_settings.apply(target, settings)
         assert film_node.recipe(target) == expected and target.live_preview == live
 

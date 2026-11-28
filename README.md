@@ -17,7 +17,7 @@ For development on a new machine, start with the [developer handoff / 开发交�
 
 ## Installation
 
-Requires **Blender 5.3 or later** on **Windows x64** or **macOS 14 or later on Apple Silicon**. Download `raw_photo_editor-1.1.0.zip` from Releases, choose **Preferences → Get Extensions → Install from Disk**, then select **Open Photo Workspace**.
+Requires **Blender 5.3 or later** on **Windows x64** or **macOS 14 or later on Apple Silicon**. Choose **Preferences → Get Extensions → Install from Disk**, select `raw_photo_editor-1.1.1.zip`, then select **Open Photo Workspace**.
 
 If you used the earlier `blender_raw` extension, disable it in **Preferences → Add-ons** before enabling `raw_photo_editor`. Set any custom add-on preferences again in the new entry.
 
@@ -29,6 +29,6 @@ The matching `raw_photo_editor-source-*.zip` includes the Windows decoder wheel 
 blender -b --factory-startup --offline-mode --command extension build --source-dir blender_raw
 ```
 
-The v1.1.0 Git checkout includes all four dependency wheels. To rebuild the Windows RAW decoder itself, use the [decoder workflow](.github/workflows/prepare-decoder.yml).
+The Git checkout includes all four dependency wheels. To rebuild the Windows RAW decoder itself, use the [decoder workflow](.github/workflows/prepare-decoder.yml).
 
 Maintained by **ShawnHu**. [GPL-3.0-or-later](LICENSE) · [Third-party licenses and credits](blender_raw/vendor/THIRD_PARTY.md)

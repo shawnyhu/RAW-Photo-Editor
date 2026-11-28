@@ -1,6 +1,6 @@
 schema_version = "1.0.0"
 id = "raw_photo_editor"
-version = "1.1.0"
+version = "1.1.1"
 name = "RAW Photo Editor"
 tagline = "Lightweight, open-source RAW development and film simulation"
 maintainer = "ShawnHu"

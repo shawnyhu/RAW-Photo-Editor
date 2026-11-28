@@ -183,3 +183,11 @@ Retina 窗口上，Blender 提供的逻辑窗口宽度与事件坐标使用的�
 1.1.0 的最终安装包 SHA-256 为 `d0b65683d632123a92f855f991407c94ff665a984f0c184956846d1be874eee4`。同一份 ZIP 通过 Windows x64 上的离线安装、导出和功能回归，也在本机 M1 Ultra 上重新通过上述配对、黑白像素、EXR 和两个尺寸的窗口点击。Windows 本次使用 GitHub 托管机器。[双平台安装及 Windows 作业记录](https://github.com/shawnyhu/RAW-Photo-Editor/actions/runs/46028491381)
 
 后续版本由 Windows 与 Mac 两台本地机器上的 Codex 验收同一份安装包。双方记录相同 SHA-256 且测试通过，即可结束验收并按发布请求上传该包。推送和拉取请求的自动托管测试已关闭。[版本交接步骤](development.md#版本与交接)
+
+## 2026-11-28 · Spektrafilm Lite 换片时保留效果开关与模式（1.1.1）
+
+此前从 Film 菜单选片会关闭已启用的效果，并把颗粒模型和柔光滤镜重设为默认值。`film_node.py` 现在仅在选片时跳过这些控件，包括旧配方中的印片柔光开关和滤镜。显影、相纸、颗粒面积、光晕强度、柔光强度及扫描仪内部校正参数继续取新胶片的推荐值。Film Defaults 仍可恢复完整配方。
+
+在 macOS 的 Blender 5.3.0 临时配置中离线安装修改后的 ZIP。`tests/spektrafilm_stock_defaults.py` 验证了 64 款胶片切换、完整重置及工程保存重开。通过菜单切换至 Kodak Verita 200D 后，Metal 渲染与在该片默认参数上手动开启 Production 颗粒和 Black Pro-Mist 的参考图逐像素一致。个人预设、胶片校准、处理参数和菜单目标回归均通过。本次验证平台为 Apple Silicon。
+
+macOS 26.6.2 arm64、Blender 5.3.0 已从 1.1.1 安装包复验以上 64 款胶片和 Metal 像素，并通过 15 条黑白路径及 24 组黑白颗粒渲染。安装包 SHA-256 为 `3690cca8ecee03bae2b8f7a75e4809309d052947843782fbf12de7996b49f038`。

@@ -57,11 +57,7 @@ def assert_recommendation(node, stock):
     assert node.preset_film == stock and node.use_stock_calibration
     assert node.paper == (record["target_print"] or "")
     assert node.process == MODES[1 if record["type"] == "positive" else 0]
-    assert not node.scanNegativeInvert and not node.grain and not node.halation
-    assert node.grain_model == "Preview" and not node.preset_name
-    for key, effect in film_effects.BY_KEY.items():
-        expected = record["parameters"].get(key, effect.default)
-        np.testing.assert_allclose(recipe["effects"][key], expected, rtol=0, atol=1e-6, err_msg=key)
+    assert not node.scanNegativeInvert and not node.preset_name
     for key, expected in record["parameters"].items():
         values = recipe["effects"] if key in recipe["effects"] else recipe["parameters"]
         np.testing.assert_allclose(values[key], expected, rtol=0, atol=1e-6, err_msg=key)
@@ -114,13 +110,14 @@ def check_node(folder):
     original_json = node.preset_parameters
     artistic = noncalibration_recipe(node)
 
-    # Explicit Film selection loads the complete recommendation, replacing the
-    # previous look's print, effects and hidden native overrides together.
+    # Switching after a preset import replaces its print and calibration.
     node.film = VELVIA
     assert node.process == MODES[1] and not node.scanNegativeInvert
     assert node.preset_parameters != original_json
     assert_calibration(node, engine.dir_defaults(VELVIA))
     assert_recommendation(node, VELVIA)
+    assert node.scannerEnabled == artistic["effects"]["scannerEnabled"]
+    assert film_node.recipe(node)["grain_model"] == artistic["grain_model"]
     assert noncalibration_recipe(node) != artistic
     fixed_recipe = film_node.recipe(node)
     node.film = PORTRA
